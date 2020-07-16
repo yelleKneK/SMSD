@@ -1,0 +1,103 @@
+#' seq_fwd_nexp_mean
+#'
+#' Purely Sequential approach to Get Fixed Width Confidence Interval
+#' for the mean of negative exponential random variables.
+#'
+#' @param data The data for which to calculate the confidence interval.
+#' A numeric vector.
+#' @param d Half of the confidence interval width, must be a non-zero positive
+#' value.
+#' @param alpha The significance level. A value between 0 and 1.
+#' @param gamma gamma
+#' @param pilot Should a pilot sample be generated. TRUE/FALSE value.
+#' default value is \code{FALSE}.
+#' @param verbose Should the criterion be printed. Default is \code{FALSE}.
+#' @param na.rm This parameter controls whether NA values are removed from
+#' the data prior to calculation. Default is \code{TRUE}.
+#'
+#' @return The calculated confidence interval, the sample size, data mean,
+#' and an indicator of if the criterion was satisfied.
+#'
+#' @author Bhargab Chattopadhyay \email{Bhargab@iiitvadodara.ac.in},
+#' Neetu Shah \email{201451015@iiitvadodara.ac.in}, Ken Kelley \email{kkelley@nd.edu}
+#'
+#' @references
+#' Mukhopadhyay, N., \& de Silva, Basil M. (2009). \emph{Sequential Methods and Their Applications}. New York: CRC Press.
+#'
+#'
+#' @export seq_fwd_nexp_mean
+#'
+#'
+#' @examples
+#' pilot_ss <- seq_fwd_nexp_mean(alpha=0.05, d=0.2, gamma=1, pilot=TRUE)
+#' SLS <- rexp(pilot_ss, rate=1)
+#' seq_fwd_nexp_mean(data=SLS, d=0.2, alpha=0.05, pilot=FALSE)
+seq_fwd_nexp_mean <- function(data, d, alpha, gamma,
+                              pilot=FALSE, verbose=FALSE, na.rm=TRUE){
+  if(missing(d)){
+    stop("You must specify \'d\'")
+  }
+
+  if(missing(alpha)){
+    stop("You must specify \'alpha\'")
+  }
+
+  if(!missing(d)){
+    if(d<0) stop("d should be a non-zero positive value")
+  }
+
+  if(!missing(alpha)){
+    if(alpha>1 & alpha<0) stop("alpha should be between 0 and 1")
+  }
+
+  if(missing(gamma)) gamma <- 1
+
+  if(pilot==FALSE)
+  {
+    if (!is.data.frame(data) && !is.matrix(data) && !is.vector(data)){
+      stop("The argument 'data' must be a data.frame
+           or matrix with one column")
+    }
+
+    if (dim(data)[2] != 1 && !is.null(data) && !is.vector(data)){
+      stop("The argument 'data' must have only one column,
+           or be 'NULL' for pilot = TRUE")
+    }
+
+
+    if(is.data.frame(data))
+    {
+      data <- as.vector(data)
+    }
+    if(na.rm){
+      data <-  data[!is.na( data)]
+    }
+    n <- length(data)
+
+    U <- sum(data-min(data))/(n-1)
+
+    optimal_N <- as.integer(((-log(alpha, base = exp(1)))/d)*U)
+
+    ci <- c(min(data)-d, min(data))
+
+    if(verbose==FALSE){
+      Outcome <- list("Confidence Interval"=ci[1],ci[2],
+                            N=n, mean=mean(data),
+                            "Is.Satisfied?"=(n >= optimal_N))
+    }
+    if(verbose==TRUE) {
+      Outcome <- list("Confidence Interval"=ci[1],ci[2],
+                            N=n, mean=mean(data),
+                            Criterion=optimal_N,
+                           "Is.Satisfied?"= (n >= optimal_N))
+      }
+  }
+
+  if(pilot==TRUE) {
+    Outcome <- c(Pilot.SS=max(2,
+                              ceiling((stats::qnorm(1-alpha)/d)^(2/(1+gamma)))
+                              +1))
+  }
+
+  return(Outcome)
+}

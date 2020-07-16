@@ -1,0 +1,12 @@
+Package: SMSD
+Type: Package
+Title: Sequential Methods for Study Design
+Version: 0.0.1
+Authors@R: c(person("Ken", "Kelley", email = "kkelley@nd.edu", role = c("aut", "cre")), person("Francis", "Bilson Darku", email = "fbilsond@nd.edu", role = c("aut")), person("Bhargab", "Chattopadhyay", email = "bhargab@iiitvadodara.ac.in", role = c("aut")))
+Description: SMSD is a package for implementing sequential methods when designing studies. One aspect of SMSD is that it implements many of the methods discussed in N. Mukhopadhyay and B. M. de Silva (2009). Additionally, the methods developed in Kelley, Darku, and Chattopadhyay (2018; 2019) and Chattopadhyay and Kelley (2016; 2017) are implemented. The work of Kelley, Darku, and Chattopadhyay (2018; 2019) and Chattopadhyay and Kelley (2018; 2019) are general, but developed in the context of the managerial, behavioral, and social sciences (e.g., psychology, sociology, economics). Additionally, the MBESS package as well as the BUCSS packages for other aspects of study design complememt SMSD. 
+Maintainer: Ken Kelley  <Jkkelley@nd.edu>
+License: GPL (>= 3)
+Imports: matrixStats, copula
+Encoding: UTF-8
+RoxygenNote: 7.1.1
+

@@ -1,2 +1,2 @@
 # SMSD
-Sequential Methods for Study Design: An R Package
+Sequential Methods for Study Design

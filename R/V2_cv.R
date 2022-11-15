@@ -10,7 +10,7 @@
 #'
 #' @export V2_cv
 #'
-#' @author Bhargab Chattopadhyay \email{Bhargab@iiitvadodara.ac.in}, Ken Kelley \email{kkelley@nd.edu}
+#' @author Bhargab Chattopadhyay \email{bhargab@iimv.ac.in}, Ken Kelley \email{kkelley@nd.edu}
 #'
 #' @examples
 #' x <- c(1:5)

@@ -14,6 +14,11 @@
 #'
 #' @return The calculated moment.
 #'
+#'
+#' @author Ken Kelley \email{kkelley@nd.edu},
+#' Francis Bilson Darku \email{fbilsond@nd.edu},
+#' Bhargab Chattopadhyay \email{bhargab@iimv.ac.in}
+#'
 #' @examples
 #' x <- c(1:5)
 #' mu4(x)

@@ -9,7 +9,7 @@
 #'
 #' @return The estimated asymptotic variance of the standardized mean.
 #'
-#'@author Bhargab Chattopadhyay \email{Bhargab@iiitvadodara.ac.in}, Ken Kelley \email{kkelley@nd.edu}
+#'@author Bhargab Chattopadhyay \email{bhargab@iimv.ac.in}, Ken Kelley \email{kkelley@nd.edu}
 #'
 #' @examples
 #' x <- c(1:4)
@@ -27,7 +27,8 @@ V2_smd <- function(x, y, na.rm=FALSE)
     y <-  y[!is.na( y)]
   }
   Spn <- sqrt(0.5*(stats::var(x) + stats::var(y)))
-  #correct formula; 0.5 missing in manuscript
+  
+  #t1 is correct here. In the article, the 0.5 (i.e., 1/2) was missing.
   t1 <- 0.5*(mean(x) - mean(y))*(mu3(x) - mu3(y))/Spn^4
   t2 <- ((mean(x) - mean(y))^2)/(4*Spn^6)
   t3 <- ((mu4(x) + mu4(y))/4 - (Spn^4)/2) # correct formula;

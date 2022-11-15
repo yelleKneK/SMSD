@@ -8,7 +8,7 @@
 #'
 #' @return The estimated estimated asymptotic variance of the Gini index. 
 #'
-#' @author Bhargab Chattopadhyay \email{Bhargab@iiitvadodara.ac.in}, Ken Kelley \email{kkelley@nd.edu}
+#' @author Bhargab Chattopadhyay \email{bhargab@iimv.ac.in}, Ken Kelley \email{kkelley@nd.edu}
 #'
 #' @examples
 #' x <- c(1:4)

@@ -16,7 +16,7 @@
 #'
 #' @author Ken Kelley \email{kkelley@nd.edu},
 #' Francis Bilson Darku \email{fbilsond@nd.edu},
-#' Bhargab Chattopadhyay \email{bhargab@utdallas.edu}
+#' Bhargab Chattopadhyay \email{bhargab@iimv.ac.in}
 #'
 #' @examples
 #' x <- rnorm(10)

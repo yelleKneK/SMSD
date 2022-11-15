@@ -1,4 +1,4 @@
-#' power for two independent groups when population standard deviation known
+#' Power and Type II error rates for two independent groups when population standard deviation is known
 #'
 #' This function calculates the probability of Type II error when the sample size is known, and the required sample size to achieve a preassigned Type II error probability (beta) for a test of two independent groups. This function uses the $z$-distribution (note the more commonly used $t$-distribution) is used.
 #
@@ -29,6 +29,9 @@
 #' @references
 #' Mukhopadhyay, N., \& de Silva, B. M. (2009). \emph{Sequential Methods and Their Applications}. New York: CRC Press.
 #'
+#' @author Ken Kelley \email{kkelley@nd.edu},
+#' Francis Bilson Darku \email{fbilsond@nd.edu},
+#' Bhargab Chattopadhyay \email{bhargab@iimv.ac.in}
 #'
 #' @examples
 #' # Set parameter values

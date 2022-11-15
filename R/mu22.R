@@ -9,6 +9,10 @@
 #'
 #' @return The calcualted value for use in other functions.
 #'
+#' @author Ken Kelley \email{kkelley@nd.edu},
+#' Francis Bilson Darku \email{fbilsond@nd.edu},
+#' Bhargab Chattopadhyay \email{bhargab@iimv.ac.in}
+#'
 #' @examples
 #' x <- c(1:4)
 #' y <- c(2:5)

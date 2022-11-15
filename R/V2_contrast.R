@@ -13,7 +13,7 @@
 #'
 #' @export V2_contrast
 #'
-#' @author Bhargab Chattopadhyay \email{Bhargab@iiitvadodara.ac.in}, Ken Kelley \email{kkelley@nd.edu}
+#' @author Bhargab Chattopadhyay \email{bhargab@iimv.ac.in}, Ken Kelley \email{kkelley@nd.edu}
 #'
 #' @examples
 #' dat_1 <- matrix(1:10, ncol=2)

@@ -14,6 +14,11 @@
 #'
 #' @export calculate_c
 #'
+#'
+#' @author Ken Kelley \email{kkelley@nd.edu},
+#' Francis Bilson Darku \email{fbilsond@nd.edu},
+#' Bhargab Chattopadhyay \email{bhargab@iimv.ac.in}
+#'
 #' @examples
 #' calculate_c(var = 1, alpha = 0.05, d = 0.75)
 #'

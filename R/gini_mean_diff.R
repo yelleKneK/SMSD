@@ -9,6 +9,10 @@
 #' the data prior to calculation. Default is \code{TRUE}.
 #' @return The calculated Gini Mean Difference.
 #'
+#' @author Ken Kelley \email{kkelley@nd.edu},
+#' Francis Bilson Darku \email{fbilsond@nd.edu},
+#' Bhargab Chattopadhyay \email{bhargab@iimv.ac.in}
+#'
 #' @examples
 #' # Household money from income brackets (2010) from Table C of
 #' # https://en.wikipedia.org/wiki/Gini_coefficient. 

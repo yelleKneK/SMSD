@@ -9,6 +9,10 @@
 #' 
 #' @return The calculated value of the Gini index. 
 #'
+#' @author Ken Kelley \email{kkelley@nd.edu},
+#' Francis Bilson Darku \email{fbilsond@nd.edu},
+#' Bhargab Chattopadhyay \email{bhargab@iimv.ac.in}
+#'
 #' @examples
 #' # Household money from income brackets (2010) from Table C of
 #' # https://en.wikipedia.org/wiki/Gini_coefficient. 

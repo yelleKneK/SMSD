@@ -1,0 +1,21 @@
+pandoc: 3.8.3
+pkgdown: 2.2.1
+pkgdown_sha: ~
+articles:
+  complete-tour: complete-tour.html
+  coverage-and-design: coverage-and-design.html
+  introduction: introduction.html
+  mrpe-cv: mrpe-cv.html
+  mrpe-smd: mrpe-smd.html
+  published-examples: published-examples.html
+  sensitivity-analysis: sensitivity-analysis.html
+  seq-aipe-correlations: seq-aipe-correlations.html
+  seq-aipe-smd: seq-aipe-smd.html
+  seq-budget: seq-budget.html
+  special-cases-and-simulation: special-cases-and-simulation.html
+  step-by-step-sequential-workflow: step-by-step-sequential-workflow.html
+  articles/validation: validation.html
+last_built: 2026-10-28T10:41Z
+urls:
+  reference: https://yelleknek.github.io/SMSD/reference
+  article: https://yelleknek.github.io/SMSD/articles

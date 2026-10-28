@@ -1,0 +1,324 @@
+# Sequential AIPE Check for a Contrast
+
+Checks, with the data collected so far from K independent groups,
+whether enough observations are in hand for a confidence interval for a
+contrast of the group means, \\\psi = \sum\_{k=1}^{K} c_k \mu_k\\ (for
+example one condition against the average of two others), that is no
+wider than a chosen width, without assuming normality or equal variances
+and without planning values. The contrast is one of the effect sizes
+covered by the sequential accuracy in parameter estimation (AIPE)
+procedure of Kelley, Darku, and Chattopadhyay (2018, Example 6).
+
+## Usage
+
+``` r
+seq_aipe_c(groups, contrast_weights, width, conf_level = 0.95)
+```
+
+## Arguments
+
+- groups:
+
+  A list of K numeric vectors (K at least 2), one per group: the
+  observations collected so far from each population. Every vector needs
+  at least 4 observations and all must have the same length; missing or
+  infinite values are an error. A matrix or data frame is not accepted
+  (a data frame in "long" format would be misread); with one column per
+  group use `as.list(as.data.frame(m))`, and with an outcome `y` and a
+  grouping variable `g` use `split(y, g)`.
+
+- contrast_weights:
+
+  A numeric vector of K contrast weights \\c_k\\, in the order of
+  `groups` (see "Names" in Details). They must be finite and not all
+  zero.
+
+- width:
+
+  The target full width of the confidence interval for the contrast
+  (\\\omega\\ in the cited article): the upper limit minus the lower
+  limit, in the units of the outcome. A single positive number.
+
+- conf_level:
+
+  The confidence level of the interval, a single number strictly between
+  0 and 1. Default 0.95.
+
+## Value
+
+An object of class `c("smsd_check", "data.frame")` (see
+[`smsd_check_methods`](https://yelleknek.github.io/SMSD/reference/smsd_check_methods.md)
+for its [`print()`](https://rdrr.io/r/base/print.html),
+[`summary()`](https://rdrr.io/r/base/summary.html), and `tidy()`
+methods) with one row per quantity and columns `term` and `value`. The
+rows are, in order:
+
+- `lower_limit`:
+
+  the lower confidence limit (`NA` when the variance estimate is not yet
+  usable or the estimate cannot be computed; see the section below);
+
+- `contrast`:
+
+  the estimated contrast;
+
+- `upper_limit`:
+
+  the upper confidence limit (`NA` whenever `lower_limit` is);
+
+- `xi_squared`:
+
+  the estimated asymptotic variance \\\hat{\xi}\_n^2\\, at least
+  \\n^{-3}\\ (the bound itself when the estimate is not yet usable);
+
+- `criterion_n`:
+
+  the per group sample size the stopping rule currently requires (at
+  least `current_n + 1` when the variance estimate is not yet usable or
+  the estimate cannot be computed);
+
+- `current_n`:
+
+  the current per group sample size (the total sample size is K times
+  this).
+
+The object also carries these attributes:
+
+- `is_satisfied`:
+
+  `TRUE` when the stopping rule is met, otherwise `FALSE`; never `NA`,
+  and always identical to `current_n >= criterion_n`;
+
+- `method`:
+
+  the string `"contrast"`;
+
+- `n_per_group`:
+
+  an integer vector with the size of each group, named when `groups` is;
+
+- `contrast_weights`:
+
+  the weights, as doubles;
+
+- `current_n`, `criterion_n`:
+
+  the values in the rows of those names (both per group);
+
+- `conf_level`, `width`:
+
+  the values supplied;
+
+- `variance_unusable`:
+
+  `TRUE` when the raw variance estimate is zero, negative, or not finite
+  (see the section below), otherwise `FALSE`;
+
+- `notes`:
+
+  a character vector, empty unless something needs explaining.
+
+## Details
+
+The function evaluates the stopping rule once and returns. The user
+collects the pilot sample from every group (see
+[`seq_aipe_c_pilot`](https://yelleknek.github.io/SMSD/reference/seq_aipe_c_pilot.md)),
+calls `seq_aipe_c()`, and, while the rule is not met, adds the same
+number of observations to *every* group and calls it again. The function
+prints nothing and keeps no state.
+
+**Estimate.** The contrast is estimated by \\\hat{\psi}\_n = \sum_k c_k
+\bar{X}\_{kn}\\, the weighted sum of the group means (their Equation
+16). The article writes the weights as summing to one; the procedure
+does not depend on that, and any weights that are finite and not all
+zero are accepted (weights that sum to zero give a comparison among
+groups).
+
+**Stopping rule.** With \\n\\ observations in each group, sampling stops
+at the first \\n\\, at or after the pilot size, with \$\$n \ge
+\left\lceil \frac{4 z\_{\alpha/2}^2}{\omega^2} \left(\hat{\xi}\_n^2 +
+\frac{1}{n}\right) \right\rceil\$\$ (their Equation 22), where
+\\\hat{\xi}\_n^2 = \sum_k c_k^2 s\_{kn}^2\\ estimates the asymptotic
+variance of \\\sqrt{n}(\hat{\psi}\_n - \psi)\\. The reported interval is
+\\\hat{\psi}\_n \pm z\_{\alpha/2} \hat{\xi}\_n / \sqrt{n}\\ (their
+Equation 23). Whenever the rule is met, the width of that interval is at
+most `width`.
+
+**Balanced data.** The function implements the balanced procedure of the
+article's Example 6, which adds an observation to every group at each
+stage, so every group must have the same number of observations. Groups
+of unequal size are an error rather than a fallback: a rule applied
+group by group cannot guarantee the requested width. Bring every group
+up to the common size and call the function again. The article also
+outlines an extension to unbalanced designs (its Equations 39 to 47), in
+which the optimal group sizes are proportional to \\c_k \sigma_k\\ and
+are to be estimated sequentially; the article prints no stopping rule
+for it, and that extension is not implemented.
+
+**Units.** Unlike a standardized effect size, the contrast and `width`
+are in the units of the outcome, while the correction term \\1/n\\ in
+the stopping rule and the lower bound \\n^{-3}\\ on the variance
+estimate are pure numbers, as printed in the article. They play their
+intended roles (a small correction, and a bound far below any plausible
+estimate) when \\\xi^2\\ is not many orders of magnitude from one. If
+the outcome is recorded in units that make its variance very small or
+very large, rescale it (and `width` with it) first. When the variance
+estimate is positive but below \\n^{-3}\\, which on ordinary scales a
+weighted sum of sample variances essentially never is, the bound is used
+in its place, as the article prescribes, so the interval is wider and
+the required sample size larger than the estimate itself would give; a
+note on the returned object says that this happened and advises
+rescaling.
+
+**A group with no variation.** When every observation in a group with a
+nonzero weight is the same (values that agree to ten significant digits
+count as the same), the variance of that group has not been estimated,
+and so neither has the variance of the contrast: the contrast is still
+estimated, but the check reports the rule as not met and a note names
+the group (see the section below), as
+[`seq_budget`](https://yelleknek.github.io/SMSD/reference/seq_budget.md)
+does with the same data. Summing the variances of the other groups
+instead would leave the constant group out of the variance of the
+contrast. In simulated studies of three groups answering a 5 point item,
+one of them with 70% of its answers at the top of the scale (weights 1,
+-1/2, -1/2, `width = 2`, 4,000 studies), 23% of the studies would have
+stopped with that group constant, after 4 to 7 observations per group,
+and 74% of their intervals covered the contrast; with the group treated
+as not yet estimated, coverage over all studies was 0.934 against 0.899.
+The price is paid where a group stays constant: for binary outcomes with
+proportions 0.30, 0.02, and 0.02 (`width = 0.5`, 2,000 studies) the mean
+final sample size was 75 per group against 18, and coverage 0.939
+against 0.891. If a group shows no variation well past the pilot sample,
+reconsider the measure. A group whose weight is zero takes no part in
+the contrast and is not looked at.
+
+**Names.** `groups` and `contrast_weights` are matched by position. If
+both are named, the names must be the same and in the same order;
+otherwise the function stops, so that weights named in another order
+(for example against a list made by
+[`split()`](https://rdrr.io/r/base/split.html), which is in alphabetical
+order) are not applied to the wrong groups.
+
+**What the guarantee is.** The width guarantee is exact. The coverage
+guarantee is asymptotic: coverage approaches `conf_level` as `width`
+shrinks (their Theorem 2). In simulated studies with a 95% interval and
+one observation per group added at each stage, coverage for three normal
+groups with unit variances and weights 1, -1/2, -1/2 was 0.948 at
+`width = 0.4` (6,000 studies, about 144 per group at the end) and 0.945
+at `width = 0.2` (2,000 studies, about 577 per group); for three groups
+with skewed distributions and unequal variances it was 0.949 and 0.951
+(Monte Carlo standard errors 0.003 and 0.005). At a wide target the
+final sample is small and coverage falls a little short: with means 0.5,
+0, and 0 it was 0.936 at `width = 1` (10,000 studies, about 23 per
+group). The variance estimate, a weighted sum of sample variances,
+cannot be negative, and it was never below its lower bound in these
+studies.
+
+## Estimates That Are Not Yet Usable
+
+When the raw variance estimate is zero (exactly, or to within rounding
+error), negative, or not finite, which is common at small sample sizes
+for some effect sizes, or when the point estimate cannot be computed (a
+sample with no variation, where values that agree to ten significant
+digits count as equal), the check reports the stopping rule as not met,
+sets `attr(out, "variance_unusable")` to `TRUE`, and attaches a note
+that [`print()`](https://rdrr.io/r/base/print.html) shows; see
+[`smsd_check_methods`](https://yelleknek.github.io/SMSD/reference/smsd_check_methods.md).
+This is a deliberate departure from the stopping rule as printed in the
+source articles, under which the lower bound \\n^{-3}\\ would stand in
+for such an estimate and the rule would be met at once with an interval
+far narrower than requested; a positive estimate, however small, is used
+as the articles prescribe (the larger of it and \\n^{-3}\\).
+
+## References
+
+Kelley, K., Darku, F. B., & Chattopadhyay, B. (2018). Accuracy in
+parameter estimation for a general class of effect sizes: A sequential
+approach. *Psychological Methods*, *23*(2), 226–243.
+[doi:10.1037/met0000127](https://doi.org/10.1037/met0000127)
+
+Maxwell, S. E., Kelley, K., & Rausch, J. R. (2008). Sample size planning
+for statistical power and accuracy in parameter estimation. *Annual
+Review of Psychology*, *59*, 537–563.
+[doi:10.1146/annurev.psych.59.103006.093735](https://doi.org/10.1146/annurev.psych.59.103006.093735)
+
+## See also
+
+[`seq_aipe_c_pilot`](https://yelleknek.github.io/SMSD/reference/seq_aipe_c_pilot.md)
+for the pilot size, and
+[`seq_budget`](https://yelleknek.github.io/SMSD/reference/seq_budget.md)
+for a sequential interval for a contrast when the groups have different
+sampling costs and there is a budget. In DMAR:
+[`ss_aipe_c`](https://yelleknek.github.io/DMAR/reference/ss_aipe_c.html),
+the fixed sample size analog for when planning values are available,
+[`ss_aipe_sc`](https://yelleknek.github.io/DMAR/reference/ss_aipe_sc.html)
+for the standardized contrast, and
+[`ci_c`](https://yelleknek.github.io/DMAR/reference/ci_c.html).
+
+Other seq_aipe_c:
+[`seq_aipe_c_pilot()`](https://yelleknek.github.io/SMSD/reference/seq_aipe_c_pilot.md),
+[`seq_aipe_sensitivity`](https://yelleknek.github.io/SMSD/reference/seq_aipe_sensitivity.md)
+
+## Author
+
+Ken Kelley <kkelley@nd.edu>, Francis Bilson Darku <fbilsond@nd.edu>,
+Bhargab Chattopadhyay <bhargab@iiitvadodara.ac.in>
+
+## Examples
+
+``` r
+# Does a new onboarding program change first year performance ratings
+# (standardized) relative to the average of two existing programs? The
+# aim is a 95% confidence interval for that contrast no wider than 0.80.
+set.seed(113)
+program_means <- c(new = 0.5, existing_a = 0, existing_b = 0)
+weights <- c(1, -0.5, -0.5)
+m <- seq_aipe_c_pilot(width = 0.80)
+ratings <- lapply(program_means, function(mu) rnorm(m, mean = mu))
+out <- seq_aipe_c(ratings, weights, width = 0.80)
+out
+#> Sequential check (contrast)
+#> 
+#>   Current n       : 5
+#>   Criterion n     : 42
+#>   Target width    : 0.8
+#>   Confidence level: 95%
+#>   Coverage        : asymptotic; assess with sensitivity analysis
+#> 
+#>   lower_limit       : -0.3410512
+#>   contrast          : 0.7461581
+#>   upper_limit       : 1.833367
+#>   xi_squared        : 1.538509
+#>   criterion_n       : 42
+#>   current_n         : 5
+#> 
+#>   Stopping rule met: FALSE
+
+# The rule is not met at the pilot. Add one employee to every program and
+# check again, until it is.
+while (!attr(out, "is_satisfied")) {
+  ratings <- Map(function(r, mu) c(r, rnorm(1, mean = mu)),
+                 ratings, program_means)
+  out <- seq_aipe_c(ratings, weights, width = 0.80)
+}
+out
+#> Sequential check (contrast)
+#> 
+#>   Current n       : 44
+#>   Criterion n     : 44
+#>   Target width    : 0.8
+#>   Confidence level: 95%
+#>   Coverage        : asymptotic; assess with sensitivity analysis
+#> 
+#>   lower_limit       : -0.0953664
+#>   contrast          : 0.2997286
+#>   upper_limit       : 0.6948236
+#>   xi_squared        : 1.787967
+#>   criterion_n       : 44
+#>   current_n         : 44
+#> 
+#>   Stopping rule met: TRUE
+attr(out, "n_per_group")
+#>        new existing_a existing_b 
+#>         44         44         44 
+```

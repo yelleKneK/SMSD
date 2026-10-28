@@ -1,0 +1,128 @@
+cff-version: 1.2.0
+message: "If you use SMSD, please cite it as below, together with the article that developed the method you used (listed under references)."
+type: software
+title: "SMSD: Sequential Methods for Study Design"
+authors:
+  - family-names: Kelley
+    given-names: Ken
+    orcid: "https://orcid.org/0000-0002-4756-8360"
+    affiliation: "University of Notre Dame"
+  - family-names: Darku
+    given-names: "Francis Bilson"
+  - family-names: Chattopadhyay
+    given-names: Bhargab
+    orcid: "https://orcid.org/0000-0001-7713-3125"
+version: 1.0.0
+license: GPL-3.0-or-later
+repository-code: "https://github.com/yelleKneK/SMSD"
+abstract: >-
+  Sequential methods for study design when the sample size cannot be fixed in
+  advance because the parameters required to plan it are unknown. SMSD
+  implements accuracy in parameter estimation (AIPE) and minimum risk point
+  estimation (MRPE) procedures that collect data in stages and decide whether
+  to keep sampling based on the data so far, along with a budget constrained
+  sequential procedure for a linear contrast across K populations. It
+  complements the MBESS and DMAR packages for fixed sample size analysis.
+keywords:
+  - R package
+  - sequential analysis
+  - sequential estimation
+  - sample size planning
+  - study design
+  - accuracy in parameter estimation
+  - minimum risk point estimation
+  - effect sizes
+  - confidence intervals
+  - stopping rule
+references:
+  - type: article
+    authors:
+      - family-names: Chattopadhyay
+        given-names: Bhargab
+      - family-names: De
+        given-names: "S. K."
+    title: "Estimation of Gini index within pre-specified error bound"
+    journal: "Econometrics"
+    year: 2016
+    volume: 4
+    issue: 3
+    start: 30
+    doi: 10.3390/econometrics4030030
+  - type: article
+    authors:
+      - family-names: Chattopadhyay
+        given-names: Bhargab
+      - family-names: Kelley
+        given-names: Ken
+    title: "Estimation of the coefficient of variation with minimum risk: A sequential method for minimizing sampling error and study cost"
+    journal: "Multivariate Behavioral Research"
+    year: 2016
+    volume: 51
+    issue: 5
+    start: 627
+    end: 648
+    doi: 10.1080/00273171.2016.1203279
+  - type: article
+    authors:
+      - family-names: Chattopadhyay
+        given-names: Bhargab
+      - family-names: Kelley
+        given-names: Ken
+    title: "Estimating the standardized mean difference with minimum risk: Maximizing accuracy and minimizing cost with sequential estimation"
+    journal: "Psychological Methods"
+    year: 2017
+    volume: 22
+    issue: 1
+    start: 94
+    end: 113
+    doi: 10.1037/met0000089
+  - type: article
+    authors:
+      - family-names: Kelley
+        given-names: Ken
+      - family-names: Darku
+        given-names: "Francis Bilson"
+      - family-names: Chattopadhyay
+        given-names: Bhargab
+    title: "Accuracy in parameter estimation for a general class of effect sizes: A sequential approach"
+    journal: "Psychological Methods"
+    year: 2018
+    volume: 23
+    issue: 2
+    start: 226
+    end: 243
+    doi: 10.1037/met0000127
+  - type: article
+    authors:
+      - family-names: Kelley
+        given-names: Ken
+      - family-names: Darku
+        given-names: "Francis Bilson"
+      - family-names: Chattopadhyay
+        given-names: Bhargab
+    title: "Sequential accuracy in parameter estimation for population correlation coefficients"
+    journal: "Psychological Methods"
+    year: 2019
+    volume: 24
+    issue: 4
+    start: 492
+    end: 515
+    doi: 10.1037/met0000203
+  - type: article
+    authors:
+      - family-names: Chattopadhyay
+        given-names: Bhargab
+      - family-names: Bandyopadhyay
+        given-names: Tathagata
+      - family-names: Kelley
+        given-names: Ken
+      - family-names: Padalunkal
+        given-names: "Jishnu J."
+    title: "A sequential approach for noninferiority or equivalence of a linear contrast under cost constraints"
+    journal: "Psychological Methods"
+    year: 2025
+    volume: 30
+    issue: 2
+    start: 425
+    end: 439
+    doi: 10.1037/met0000570

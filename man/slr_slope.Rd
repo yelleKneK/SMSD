@@ -2,27 +2,63 @@
 % Please edit documentation in R/slr_slope.R
 \name{slr_slope}
 \alias{slr_slope}
-\title{slr_slope}
+\title{Simple Linear Regression Slope}
 \usage{
 slr_slope(x, y, na.rm = TRUE)
 }
 \arguments{
-\item{x}{The first vector}
+\item{x}{A numeric vector, the predictor.}
 
-\item{y}{The second vector}
+\item{y}{A numeric vector, the outcome. It must have the same length as
+\code{x}; the two are paired by position.}
 
-\item{na.rm}{This parameter controls whether NA values are removed from
-the data prior to calculation. Default is \code{TRUE}.}
+\item{na.rm}{Should a pair be removed when either of its values is
+missing? Default \code{TRUE}. With \code{na.rm = FALSE} a missing value
+is an error.}
 }
 \value{
-The calculated slope.
+A single number, the estimated slope, in units of \code{y} per
+  unit of \code{x}. At least two complete pairs are needed, and \code{x}
+  must vary: a predictor with no variation is an error, because the slope
+  is then undefined. Values of \code{x} that agree to ten significant
+  digits count as no variation (such differences are usually rounding
+  error); if they are real, subtract a constant from \code{x} first. A
+  slope too large for a double (which takes units of \code{y} and
+  \code{x} more than about 300 orders of magnitude apart) is an error
+  that says so.
 }
 \description{
-This function calcualtes the slope between two vectors.
+Calculates the ordinary least squares slope of the simple linear
+regression of \code{y} on \code{x}: the expected change in \code{y} for a
+one unit increase in \code{x}. This is the point estimate used by the
+sequential procedure \code{\link{seq_aipe_reg_coef}}.
+}
+\details{
+The slope is \eqn{b_1 = s_{xy} / s_x^2}, the sample covariance of
+\code{x} and \code{y} divided by the sample variance of \code{x}
+(Kelley, Darku, and Chattopadhyay, 2018, Equation 35). It is the same
+number as \code{coef(lm(y ~ x))[2]}.
 }
 \examples{
-x <- c(1:4)
-y <- c(2:5)
-slr_slope(x, y)
+# Hours of training and a performance rating for eight employees.
+hours  <- c(2, 4, 5, 7, 8, 10, 12, 15)
+rating <- c(48, 55, 53, 61, 66, 64, 73, 80)
+slr_slope(hours, rating)
 
+}
+\references{
+Kelley, K., Darku, F. B., & Chattopadhyay, B. (2018). Accuracy in
+parameter estimation for a general class of effect sizes: A sequential
+approach. \emph{Psychological Methods}, \emph{23}(2), 226--243.
+\doi{10.1037/met0000127}
+}
+\seealso{
+\code{\link{seq_aipe_reg_coef}}; in \pkg{DMAR},
+  \code{\link[DMAR]{ci_reg_coef}} for a fixed sample size confidence
+  interval.
+}
+\author{
+Ken Kelley \email{kkelley@nd.edu},
+Francis Bilson Darku \email{fbilsond@nd.edu},
+Bhargab Chattopadhyay \email{bhargab@iiitvadodara.ac.in}
 }

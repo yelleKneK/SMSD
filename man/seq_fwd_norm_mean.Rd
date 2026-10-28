@@ -2,54 +2,148 @@
 % Please edit documentation in R/seq_fwd_norm_mean.R
 \name{seq_fwd_norm_mean}
 \alias{seq_fwd_norm_mean}
-\title{seq_fwd_norm_mean}
+\title{Fixed Width Confidence Interval for a Normal Mean}
 \usage{
-seq_fwd_norm_mean(
-  data,
-  d,
-  alpha,
-  gamma,
-  pilot = FALSE,
-  verbose = FALSE,
-  na.rm = TRUE
-)
+seq_fwd_norm_mean(x, d, conf_level = 0.95, na.rm = TRUE)
 }
 \arguments{
-\item{data}{The data for which to calculate the confidence interval.
-A numeric vector.}
+\item{x}{Numeric vector of the observations collected so far (at
+least 2).}
 
-\item{d}{Half of the confidence interval width, must be a non-zero positive
-value.}
+\item{d}{The half width of the confidence interval, in the units of the
+data: the interval reported is the sample mean plus and minus \code{d},
+so its full width is \eqn{2d}. A positive number.}
 
-\item{alpha}{The significance level. A value between 0 and 1.}
+\item{conf_level}{The confidence level (default 0.95).}
 
-\item{gamma}{gamma}
-
-\item{pilot}{Should a pilot sample be generated. True/False value.
-default value is \code{FALSE}.}
-
-\item{verbose}{Should the criterion be printed. Default is \code{FALSE}.}
-
-\item{na.rm}{This parameter controls whether NA values are removed from
-the data prior to calculation. Default is \code{TRUE}.}
+\item{na.rm}{Logical; should \code{NA} values be removed first? Default
+\code{TRUE}. With \code{FALSE}, missing values are an error.}
 }
 \value{
-The calculated confidence interval, the sample size, data mean,
-and an indcator of if the criterion was satisified.
+An object of class \code{c("smsd_check", "data.frame")} with
+  columns \code{term} and \code{value} and these rows:
+  \describe{
+    \item{\code{lower_limit}}{The sample mean minus \code{d}.}
+    \item{\code{mean}}{The sample mean, the point estimate.}
+    \item{\code{upper_limit}}{The sample mean plus \code{d}.}
+    \item{\code{optimal_n}}{The sample size the current variance estimate
+      calls for, \eqn{\lceil z_{\alpha/2}^2 S_n^2 / d^2 \rceil}
+      (\code{NA} when the data are constant).}
+    \item{\code{current_n}}{The number of observations used.}
+  }
+  Attributes: \code{is_satisfied} (\code{TRUE} once \code{current_n} is at
+  least \code{optimal_n}), \code{current_n}, \code{criterion_n} (equal to
+  \code{optimal_n}), \code{conf_level}, \code{width} (the full width
+  \eqn{2d}), \code{method}, \code{variance_unusable} (\code{TRUE} when the
+  data are constant, so that no variance has been estimated), and
+  \code{notes}.
 }
 \description{
-Purely Sequential approach to Get Fixed Width Confidence
-Interval for normal random variables
+Given the data collected so far, checks the stopping rule of the purely
+sequential fixed width confidence interval for the mean of a normal
+population with unknown variance (Mukhopadhyay and de Silva, 2009). The
+aim is an interval of half width \code{d} (full width \eqn{2d}) around
+the sample mean with the stated confidence level. No fixed sample size
+can promise that, because the size needed depends on the unknown
+variance, so observations are collected until the sample size reaches the
+size the current variance estimate calls for.
+}
+\details{
+The function does not collect data and keeps no state. Call it after each
+new observation (or batch), starting once
+\code{\link{seq_fwd_norm_mean_pilot}} observations are in hand, and stop
+sampling the first time \code{attr(out, "is_satisfied")} is \code{TRUE}.
+
+
+With the population standard deviation \eqn{\sigma} known, the interval
+\eqn{\bar{X}_n \pm d} has confidence level \eqn{1 - \alpha} when
+\eqn{n \ge n^* = z_{\alpha/2}^2 \sigma^2 / d^2}
+(\code{\link{seq_fwd_norm_mean_optimal}} returns that sample size,
+rounded up to a whole number, for a given variance). The sequential rule
+replaces \eqn{\sigma^2} by the sample variance \eqn{S_n^2}: sampling
+stops at the first \eqn{n} (at or beyond the pilot size) with
+\deqn{n \ge z_{\alpha/2}^2 S_n^2 / d^2 .}
+The \code{optimal_n} row is the right hand side rounded up, evaluated at
+the current data. The reported interval is always
+\eqn{\bar{X}_n \pm d}; it has the stated confidence level only once the
+rule is met.
+
+\strong{The confidence level is asymptotic.} It is attained in the limit
+as \code{d} shrinks (so that the required sample size grows), not at
+every \code{d}. When the target is wide relative to the standard
+deviation, sampling tends to stop early on an underestimate of the
+variance, and coverage falls below the stated level. In simulation
+(normal data with standard deviation 2, nominal 0.95, the pilot of
+\code{seq_fwd_norm_mean_pilot()} with its defaults, which was 10 at
+every target used, 40,000 replications, Monte Carlo standard error
+0.001), coverage was 0.933 at \code{d = 1} (where the required sample
+size \eqn{n^*} is about 15). It was lowest, about 0.922, when
+\eqn{n^*} was between 24 and 28, and rose from there: 0.930 at
+\eqn{n^*} of 40, 0.938 at \code{d = 0.5} (\eqn{n^*} about 61), 0.943
+at \eqn{n^*} of 100, and 0.949 at \code{d = 0.25} (\eqn{n^*} about
+246; 400,000 replications). The pilot matters: with \code{m_0 = 4} in
+place of the default 10, coverage at \code{d = 1} was 0.880.
+\code{\link{ts_fwd_norm_mean}} is the two stage alternative, whose
+confidence level is guaranteed for normal data at the price of a larger
+expected sample size.
+
+\strong{Constant data.} If every observation is equal, or equal up to
+rounding error (a range of no more than \eqn{10^{-10}} times the largest
+absolute value, as with gain scores of 0.3 computed as posttest minus
+pretest), the sample variance is zero, or nothing but rounding error, and
+the rule as printed would be met at once. The function departs from the
+printed rule deliberately: no variance has been estimated, so the rule is
+reported as not met, \code{optimal_n} is \code{NA},
+\code{attr(out, "variance_unusable")} is \code{TRUE}, and a note says so
+(see \code{\link{smsd_check_methods}}); data whose real spread is that
+small beside their size should have a common value subtracted first.
+The limits are still reported (the sample mean minus and plus
+\code{d}, which involve no variance), but they are then not an interval
+to report: \code{summary()}, \code{glance()}, and \code{tidy()} return
+them without the note, so test \code{attr(out, "variance_unusable")}
+before using them.
+
+\strong{Extreme units.} Data that do vary, but whose spread is so large
+or so small that the sample variance cannot be represented in double
+precision (differences among the observations beyond about
+\eqn{10^{154}} or below about \eqn{10^{-162}}), are an error that says
+to change the units. That case is not reported as a rule not yet met,
+because collecting more data cannot help.
 }
 \examples{
-pilot_ss <- seq_fwd_norm_mean(alpha=0.1, d=1, gamma=1, pilot=TRUE)
-SLS <- rnorm(pilot_ss)
-seq_fwd_norm_mean(data=SLS, d=1, alpha=0.1, pilot=FALSE)
+# Mean score on a 100 point exam, to within 2 points with 95\% confidence.
+# Scores are simulated here with a standard deviation of 12.
+set.seed(113)
+m <- seq_fwd_norm_mean_pilot(d = 2, conf_level = 0.95)
+scores <- rnorm(m, mean = 70, sd = 12)
+out <- seq_fwd_norm_mean(scores, d = 2, conf_level = 0.95)
+out
+
+# Add one student at a time until the stopping rule is met.
+while (!attr(out, "is_satisfied")) {
+  scores <- c(scores, rnorm(1, mean = 70, sd = 12))
+  out <- seq_fwd_norm_mean(scores, d = 2, conf_level = 0.95)
+}
+out
+
 }
 \references{
-Mukhopadhyay, N., \& de Silva, Basil M. (2009). \emph{Sequential Methods and Their Applications}. New York: CRC Press.
+Mukhopadhyay, N., & de Silva, B. M. (2009). \emph{Sequential methods and
+their applications}. Chapman & Hall/CRC. ISBN:9780367386535
+}
+\seealso{
+\code{\link{seq_fwd_norm_mean_pilot}};
+  \code{\link{seq_fwd_norm_mean_optimal}} for the sample size when the
+  variance is known, the benchmark this procedure aims for;
+  \code{\link{seq_fwd_dfr_mean}}, which makes no normality assumption;
+  \code{\link{ts_fwd_norm_mean}} for the two stage procedure.
+
+Other seq_fwd_norm_mean:
+\code{\link[=seq_fwd_norm_mean_optimal]{seq_fwd_norm_mean_optimal()}},
+\code{\link[=seq_fwd_norm_mean_pilot]{seq_fwd_norm_mean_pilot()}}
 }
 \author{
-Bhargab Chattopadhyay \email{Bhargab@iiitvadodara.ac.in},
-Neetu Shah \email{201451015@iiitvadodara.ac.in}, Ken Kelley \email{kkelley@nd.edu}
+Ken Kelley \email{kkelley@nd.edu},
+  Bhargab Chattopadhyay \email{bhargab@iiitvadodara.ac.in}
 }
+\concept{seq_fwd_norm_mean}

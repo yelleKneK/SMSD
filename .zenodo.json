@@ -1,0 +1,66 @@
+{
+  "title": "SMSD: Sequential Methods for Study Design",
+  "upload_type": "software",
+  "description": "<p>Sequential methods for study design when the sample size cannot be fixed in advance because the parameters required to plan it are unknown. SMSD implements accuracy in parameter estimation (AIPE) and minimum risk point estimation (MRPE) procedures that collect data in stages and decide whether to keep sampling based on the data so far, along with a budget constrained sequential procedure for a linear contrast across K populations.</p><p>The methods are developed in Chattopadhyay and De (2016), Chattopadhyay and Kelley (2016, 2017), Kelley, Darku, and Chattopadhyay (2018, 2019), and Chattopadhyay, Bandyopadhyay, Kelley, and Padalunkal (2025), with foundational treatment in Mukhopadhyay and de Silva (2009). SMSD complements the MBESS and DMAR packages for fixed sample size analysis.</p>",
+  "creators": [
+    {
+      "name": "Kelley, Ken",
+      "affiliation": "University of Notre Dame",
+      "orcid": "0000-0002-4756-8360"
+    },
+    {
+      "name": "Darku, Francis Bilson"
+    },
+    {
+      "name": "Chattopadhyay, Bhargab",
+      "orcid": "0000-0001-7713-3125"
+    }
+  ],
+  "license": "gpl-3.0-or-later",
+  "access_right": "open",
+  "language": "eng",
+  "keywords": [
+    "R package",
+    "sequential analysis",
+    "sequential estimation",
+    "sample size planning",
+    "study design",
+    "accuracy in parameter estimation",
+    "minimum risk point estimation",
+    "effect sizes",
+    "confidence intervals",
+    "stopping rule"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "10.3390/econometrics4030030",
+      "relation": "references",
+      "resource_type": "publication-article"
+    },
+    {
+      "identifier": "10.1080/00273171.2016.1203279",
+      "relation": "references",
+      "resource_type": "publication-article"
+    },
+    {
+      "identifier": "10.1037/met0000089",
+      "relation": "references",
+      "resource_type": "publication-article"
+    },
+    {
+      "identifier": "10.1037/met0000127",
+      "relation": "references",
+      "resource_type": "publication-article"
+    },
+    {
+      "identifier": "10.1037/met0000203",
+      "relation": "references",
+      "resource_type": "publication-article"
+    },
+    {
+      "identifier": "10.1037/met0000570",
+      "relation": "references",
+      "resource_type": "publication-article"
+    }
+  ]
+}

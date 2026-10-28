@@ -2,38 +2,198 @@
 % Please edit documentation in R/seq_aipe_gini.R
 \name{seq_aipe_gini}
 \alias{seq_aipe_gini}
-\title{seq_aipe_gini}
+\title{Sequential AIPE Check for the Gini Index}
 \usage{
-seq_aipe_gini(alpha = 0.05, omega, data = NULL, pilot = FALSE, m0 = 4)
+seq_aipe_gini(x, width, conf_level = 0.95)
 }
 \arguments{
-\item{alpha}{he significance level., default is 0.05.}
+\item{x}{A numeric vector of nonnegative values: the observations
+collected so far, at least 4 of them. Missing, infinite, or negative
+values are an error.}
 
-\item{omega}{omega}
+\item{width}{The target full width of the confidence interval for the
+Gini index: the upper limit minus the lower limit (twice the half
+width \eqn{d} of Chattopadhyay and De, 2016). A single positive number
+less than 1: the Gini index lies between 0 and 1, so an interval 1 or
+more wide would say nothing, and such a target is an error.}
 
-\item{data}{The data for which to calculate the gini index.}
-
-\item{pilot}{Should a pilot sample be generated.}
-
-\item{m0}{The initial sample size.}
+\item{conf_level}{The confidence level of the interval, a single number
+strictly between 0 and 1. Default 0.95.}
 }
 \value{
-The current sample size, the current gini coefficient, an
-indicator of if the criterion is satisfied, and the confidence interval.
+An object of class \code{c("smsd_check", "data.frame")} (see
+  \code{\link{smsd_check_methods}} for its \code{print()},
+  \code{summary()}, and \code{tidy()} methods) with one row per quantity
+  and columns \code{term} and \code{value}. The rows are, in order:
+  \describe{
+    \item{\code{lower_limit}}{the lower confidence limit (\code{NA}
+      when the variance estimate is not yet usable or the estimate
+      cannot be computed; see the section below);}
+    \item{\code{gini}}{the estimated Gini index (\code{NA} when every
+      value is zero);}
+    \item{\code{upper_limit}}{the upper confidence limit (\code{NA}
+      whenever \code{lower_limit} is);}
+    \item{\code{xi_squared}}{the estimated asymptotic variance
+      \eqn{\hat{\xi}_n^2}, at least \eqn{n^{-3}} (the bound itself
+      when the estimate is not yet usable);}
+    \item{\code{criterion_n}}{the sample size the stopping rule currently
+      requires (at least \code{current_n + 1} when the variance estimate
+      is not yet usable or the estimate cannot be computed);}
+    \item{\code{current_n}}{the current sample size.}
+  }
+  The object also carries these attributes:
+  \describe{
+    \item{\code{is_satisfied}}{\code{TRUE} when the stopping rule is
+      met, otherwise \code{FALSE}; never \code{NA}, and always
+      identical to \code{current_n >= criterion_n};}
+    \item{\code{method}}{the string \code{"Gini index"};}
+    \item{\code{current_n}, \code{criterion_n}}{the values in the
+      rows of those names;}
+    \item{\code{conf_level}, \code{width}}{the values supplied;}
+    \item{\code{variance_unusable}}{\code{TRUE} when the raw variance
+      estimate is zero, negative, or not finite (see the section below),
+      otherwise \code{FALSE};}
+    \item{\code{notes}}{a character vector, empty unless something
+      needs explaining.}
+  }
 }
 \description{
-Sequential approach to Accuracy in Parameter
- Estimation for Effect Sizes
-(AIPE): Gini Index
+Checks, with the data collected so far, whether enough observations are
+in hand for a confidence interval for the population Gini index of
+inequality (of incomes, wealth, sales, and the like) that is no wider
+than a chosen width, without assuming a distribution and without a
+planning value. This is the sequential fixed width interval procedure of
+Chattopadhyay and De (2016), expressed in the package's accuracy in
+parameter estimation (AIPE) form with the full width of the interval as
+the target.
 }
+\details{
+The function evaluates the stopping rule once and returns. The user
+collects the pilot sample (see \code{\link{seq_aipe_gini_pilot}}), calls
+\code{seq_aipe_gini()}, and, while the rule is not met, adds one or more
+observations and calls it again. The function prints nothing and keeps no
+state.
+
+\strong{Estimate.} The Gini index \eqn{G = \Delta / (2\mu)}, with
+\eqn{\Delta = E|X_1 - X_2|} Gini's mean difference, is estimated by
+\eqn{G_n = \hat{\Delta}_n / (2 \bar{X}_n)}, as returned by
+\code{\link{gini_index}}. It is defined for nonnegative data with a
+positive mean, so a negative value in \code{x} is an error. A sample in
+which every value is zero cannot estimate the index; because that can
+happen by chance in a small early sample, it is reported as "not yet
+estimable" rather than as an error (see the section below).
+
+\strong{Stopping rule.} Sampling stops at the first \eqn{n}, at or after
+the pilot size, with
+\deqn{n \ge \left\lceil \frac{4 z_{\alpha/2}^2}{\omega^2}
+  \left(\hat{\xi}_n^2 + \frac{1}{n}\right) \right\rceil,}
+which is the stopping rule of Chattopadhyay and De (2016, Equation 12),
+\eqn{n \ge (z_{\alpha/2}/d)^2 (V_n^2 + 1/n)}, with \eqn{\omega = 2d}.
+Here \eqn{\hat{\xi}_n^2} is their estimator \eqn{V_n^2} (Equation 11) of
+the asymptotic variance of \eqn{\sqrt{n}(G_n - G)} (Equation 6), built
+from the sample mean and variance, the Gini mean difference, a second
+U-statistic, and a jackknife variance. The reported interval is
+\eqn{G_n \pm z_{\alpha/2} \hat{\xi}_n / \sqrt{n}}. Whenever the rule is
+met, the width of that interval is at most \code{width}. The article
+bounds \eqn{V_n^2} below by zero; the package bounds a positive estimate
+below by \eqn{n^{-3}}, as for the other effect sizes, and treats an
+estimate that is zero or negative as not yet usable (see the section
+below).
+
+\strong{Which interval.} The interval reported is built as for every
+effect size in the family, from the estimated standard error. It is not
+the interval of Chattopadhyay and De (2016), which is the fixed width
+interval \eqn{(G_n - d, G_n + d)}, always exactly \eqn{\omega} wide,
+whose coverage their stopping rule is designed to secure. The interval
+reported is never wider than that one once the rule is met, and it
+covers less often: in simulated studies with lognormal data, a Gini
+index of 0.3, and a 95\% level (10,000 studies each, the default
+\code{m_0}, one observation added at each stage), the interval reported
+covered the Gini index in 0.890 of the studies at \code{width = 0.2} and
+0.916 at \code{width = 0.1}, and the article's interval in 0.986 and
+0.960. For the article's interval, take the estimate (the row
+\code{gini}) plus and minus half of \code{width}.
+
+Kelley, Darku, and Chattopadhyay (2018) cite this procedure and give the
+general sequential AIPE framework that the rest of the \code{seq_aipe_*}
+family implements; their article does not itself contain a Gini index
+procedure.
+
+\strong{What the guarantee is.} The width guarantee is exact. The
+coverage guarantee is asymptotic: coverage approaches \code{conf_level}
+as \code{width} shrinks. In simulated studies with a 95\% interval and
+one observation added at each stage, coverage for exponential data (a
+Gini index of 0.5) was 0.951 at \code{width = 0.1} (3,000 studies, about
+142 observations at the end), 0.937 at \code{width = 0.2} (2,000 studies,
+about 44 observations), and 0.945 at \code{width = 0.4} (6,000 studies,
+about 17 observations). For lognormal data with a Gini index of 0.3 it
+was 0.890 at \code{width = 0.2} (10,000 studies, about 30 observations)
+and 0.870 at \code{width = 0.4} (about 13 observations). The variance
+estimate was never zero, negative, or below its lower bound in these
+studies; the shortfall comes from the small final samples that wide
+targets allow.
+Use \code{\link{seq_aipe_gini_sensitivity}} to study a planned study
+before collecting data.
+}
+\section{Estimates That Are Not Yet Usable}{
+
+When the raw variance estimate is zero (exactly, or to within rounding
+error), negative, or not finite, which is common at small sample sizes
+for some effect sizes, or when the point estimate cannot be computed (a
+sample with no variation, where values that agree to ten significant
+digits count as equal), the check reports the stopping rule as not met,
+sets \code{attr(out, "variance_unusable")} to \code{TRUE}, and attaches
+a note that \code{print()} shows; see \code{\link{smsd_check_methods}}.
+This is a deliberate departure from the stopping rule as printed in the
+source articles, under which the lower bound \eqn{n^{-3}} would stand in
+for such an estimate and the rule would be met at once with an interval
+far narrower than requested; a positive estimate, however small, is used
+as the articles prescribe (the larger of it and \eqn{n^{-3}}).
+}
+
 \examples{
-pilot_ss <- seq_aipe_gini(alpha=0.05, omega=0.2, pilot=TRUE)
-SLS <- rexp(pilot_ss, rate=0.05)
-seq_aipe_gini(alpha=0.05, omega=0.2,data = SLS)
+# How unequal are household incomes (in thousands of dollars) in a
+# region? The aim is a 95\% confidence interval for the Gini index that
+# is no wider than 0.15.
+set.seed(113)
+m <- seq_aipe_gini_pilot(width = 0.15)
+income <- rlnorm(m, meanlog = 4, sdlog = 0.6)
+out <- seq_aipe_gini(income, width = 0.15)
+out
+
+# The rule is not met at the pilot. Add one household at a time and check
+# again, until it is.
+while (!attr(out, "is_satisfied")) {
+  income <- c(income, rlnorm(1, meanlog = 4, sdlog = 0.6))
+  out <- seq_aipe_gini(income, width = 0.15)
+}
+out
 
 }
-\author{
-Ken Kelley \email{KKelley@nd.edu},
-Francis Bilson Darku \email{FBilsonD@nd.edu},
-Bhargab Chattopadhyay \email{Bhargab@iiitvadodara.ac.in}
+\references{
+Chattopadhyay, B., & De, S. K. (2016). Estimation of Gini index within
+pre-specified error bound. \emph{Econometrics}, \emph{4}(3), 30.
+\doi{10.3390/econometrics4030030}
+
+Kelley, K., Darku, F. B., & Chattopadhyay, B. (2018). Accuracy in
+parameter estimation for a general class of effect sizes: A sequential
+approach. \emph{Psychological Methods}, \emph{23}(2), 226--243.
+\doi{10.1037/met0000127}
 }
+\seealso{
+\code{\link{seq_aipe_gini_pilot}} for the pilot size,
+  \code{\link{seq_aipe_gini_sensitivity}} to simulate the procedure
+  before collecting data, and \code{\link{gini_index}} and
+  \code{\link{gini_mean_diff}} for the point estimates. (\pkg{DMAR} has
+  no fixed sample size analog for the Gini index.)
+
+Other seq_aipe_gini:
+\code{\link[=seq_aipe_gini_pilot]{seq_aipe_gini_pilot()}},
+\code{\link{seq_aipe_sensitivity}}
+}
+\author{
+Ken Kelley \email{kkelley@nd.edu},
+Francis Bilson Darku \email{fbilsond@nd.edu},
+Bhargab Chattopadhyay \email{bhargab@iiitvadodara.ac.in}
+}
+\concept{seq_aipe_gini}

@@ -1,78 +1,261 @@
-#' seq_aipe_cv
+#' Pilot Sample Size for Sequential AIPE: Coefficient of Variation
 #'
-#' @description Sequential approach to Accuracy in Parameter Estimation for Effect Sizes
-#' (AIPE): Coefficient of Variation
+#' Returns the number of observations to collect before the sequential
+#' accuracy in parameter estimation (AIPE) stopping rule for the population
+#' coefficient of variation \eqn{\kappa = \sigma / \mu} can be evaluated for
+#' the first time with \code{\link{seq_aipe_cv}}.
 #'
-#' @param alpha The significance level., default is 0.05.
-#' @param omega omega
-#' @param data The dataset for which to calculate the coefficient of
-#' variation.
-#' @param pilot Shoulda pilot sample be generated.
-#' @param m0 The initial sample size.
-#' @param na.rm This parameter controls whether NA values are removed from
-#' the data prior to calculation. Default is \code{TRUE}.
+#' The pilot size is
+#' \deqn{m = \max\{m_0, \lceil 2 z_{\alpha/2} / \omega \rceil\},}
+#' where \eqn{\omega} is \code{width}, \eqn{z_{\alpha/2}} is the upper
+#' \eqn{\alpha/2} quantile of the standard normal distribution with
+#' \eqn{\alpha} equal to one minus \code{conf_level}, and \eqn{m_0} is
+#' \code{m_0} (Kelley, Darku, and Chattopadhyay, 2018, Equation 21).
+#' Whatever the data, the stopping rule cannot be met with fewer than
+#' \eqn{\lceil 2 z_{\alpha/2} / \omega \rceil} observations, which is why
+#' the pilot is at least that large.
 #'
-#' @return The current sample size, the coefficient of variation, an indicator
-#' of if the criterion is satisfied, and the confidence interval.
+#' @param width The target full width of the confidence interval for the
+#'   population coefficient of variation (\eqn{\omega} in the cited
+#'   article): the upper limit minus the lower limit, on the scale of the
+#'   coefficient of variation as a proportion (not a percentage). A single
+#'   positive number.
+#' @param conf_level The confidence level of the interval, a single number
+#'   strictly between 0 and 1. Default 0.95.
+#' @param m_0 The smallest pilot size allowed, a whole number of at least 4
+#'   (the variance estimator needs four observations). Default 4. Raising it
+#'   makes an unusable early variance estimate less likely; see
+#'   \code{\link{seq_aipe_cv}}.
 #'
-#' @author Ken Kelley \email{KKelley@@nd.edu},
-#' Francis Bilson Darku \email{FBilsonD@nd.edu},
-#' Bhargab Chattopadhyay \email{Bhargab@iiitvadodara.ac.in}
+#' @return A single integer: the pilot sample size.
 #'
-#' @export seq_aipe_cv
+#' @author
+#' Ken Kelley \email{kkelley@@nd.edu},
+#' Francis Bilson Darku \email{fbilsond@@nd.edu},
+#' Bhargab Chattopadhyay \email{bhargab@@iiitvadodara.ac.in}
+#'
+#' @references
+#' Kelley, K., Darku, F. B., & Chattopadhyay, B. (2018). Accuracy in
+#' parameter estimation for a general class of effect sizes: A sequential
+#' approach. \emph{Psychological Methods}, \emph{23}(2), 226--243.
+#' \doi{10.1037/met0000127}
 #'
 #' @examples
-#' pilot_ss <- seq_aipe_cv(alpha=0.05, omega=0.2, pilot=TRUE)
-#' SLS <- rexp(pilot_ss, rate=0.05)
-#' seq_aipe_cv(alpha=0.05, omega=0.2,data = SLS)
+#' # A 95% interval for a coefficient of variation no wider than 0.04, the
+#' # target used in Tables 3 and 4 of Kelley, Darku, and Chattopadhyay (2018)
+#' seq_aipe_cv_pilot(width = 0.04)
 #'
-seq_aipe_cv <- function(alpha = 0.05, omega, data = NULL,
-                       pilot = FALSE, m0 = 4, na.rm=TRUE)
-{
+#' # A wider target at 90% confidence
+#' seq_aipe_cv_pilot(width = 0.20, conf_level = 0.90)
+#'
+#' @seealso \code{\link{seq_aipe_cv}}
+#' @family seq_aipe_cv
+#' @export
+seq_aipe_cv_pilot <- function(width, conf_level = 0.95, m_0 = 4) {
+  .aipe_pilot(width, conf_level, m_0)
+}
 
-  if (missing(alpha) && missing(omega))
-    stop("You must specify \'omega\' and \'alpha\'.")
-  if (!is.data.frame(data) && !is.matrix(data) && !is.vector(data) & !is.null(data))
-    stop("The argument 'data' must be a data.frame or matrix with one column")
-  if (dim(data)[2] != 1 && !is.null(data) && !is.vector(data))
-    stop("The argument 'data' must have only one column, or be 'NULL' for pilot = TRUE")
-  if (alpha <= 0 || alpha >= 1)
-    stop("The argument")
-  if (pilot == FALSE)
-  {
-    if(na.rm){
-      data <-  data[!is.na( data)]
-    }
-    stop <- FALSE
-    n <- length(data)
-    CV <- V2_cv(data)
-    V2n <- V2_smd(data, data) # This is wrong
-    Criterion <- ceiling((2*stats::qnorm(1 - alpha/2)/omega)^2 *
-                           (V2n + 1/n))
 
-    if (n >= Criterion) Stop <- TRUE
-    if (n < Criterion) Stop <- FALSE
-    lci <- CV - stats::qnorm(1 - alpha/2)*sqrt(V2n/n)
-    uci <- CV + stats::qnorm(1 - alpha/2)*sqrt(V2n/n)
-    ci <- c(lci, uci)
-    if (Stop == FALSE){
-      print("The stopping rule has not yet been met;
-            sample size is not large enough")
-      Outcome <- list("Current.n" = n, "Current.cv" = CV,
-                      "Is.Satisfied?" = Stop)
-    }
+#' Sequential AIPE Check for the Coefficient of Variation
+#'
+#' Checks, with the data collected so far, whether enough observations are
+#' in hand for a confidence interval for the population coefficient of
+#' variation \eqn{\kappa = \sigma / \mu} (the standard deviation relative to
+#' the mean) that is no wider than a chosen width, without assuming a
+#' distribution and without a planning value for \eqn{\kappa}. This is the
+#' sequential accuracy in parameter estimation (AIPE) procedure of Kelley,
+#' Darku, and Chattopadhyay (2018).
+#'
+#' The function evaluates the stopping rule once and returns. The user
+#' collects the pilot sample (see \code{\link{seq_aipe_cv_pilot}}), calls
+#' \code{seq_aipe_cv()}, and, while the rule is not met, adds one or more
+#' observations and calls it again. The function prints nothing and keeps no
+#' state.
+#'
+#' \strong{Estimate.} The coefficient of variation is estimated by
+#' \eqn{k_n = s_n / \bar{X}_n} (their Equation 11). It is defined for a
+#' population with a positive mean, and is most meaningful for ratio scale
+#' measurements (times, amounts, counts). Individual observations may be
+#' negative, but a sample mean that is zero or negative cannot estimate
+#' \eqn{\kappa}; because that can happen by chance in a small early sample,
+#' it is reported as "not yet estimable" rather than as an error (see the
+#' section below). So is a mean that differs from zero only by rounding
+#' error, as the mean of centered or standardized scores does (the
+#' coefficient of variation is not meaningful for such scores); the same
+#' test is applied by \code{\link{seq_mr_cv}}.
+#'
+#' \strong{Stopping rule.} Sampling stops at the first \eqn{n}, at or after
+#' the pilot size, with
+#' \deqn{n \ge \left\lceil \frac{4 z_{\alpha/2}^2}{\omega^2}
+#'   \left(\hat{\xi}_n^2 + \frac{1}{n}\right) \right\rceil}
+#' (their Equation 22), where \eqn{\hat{\xi}_n^2} is the distribution free
+#' estimator of the asymptotic variance of \eqn{\sqrt{n}(k_n - \kappa)} in
+#' their Equations 31 and 32, built from the sample mean and variance and
+#' unbiased estimates of the third and fourth central moments. The reported
+#' interval is \eqn{k_n \pm z_{\alpha/2} \hat{\xi}_n / \sqrt{n}} (their
+#' Equation 33). Whenever the rule is met, the width of that interval is at
+#' most \code{width}.
+#'
+#' Chattopadhyay and Kelley (2016) treat the same estimator under a minimum
+#' risk criterion (see \code{\link{seq_mr_cv}}). The variance in their
+#' Equations 9 and 22 agrees with the one used here for normal data and
+#' differs otherwise; the 2018 form used here is the distribution free
+#' variance.
+#'
+#' \strong{What the guarantee is.} The width guarantee is exact. The
+#' coverage guarantee is asymptotic: coverage approaches \code{conf_level}
+#' as \code{width} shrinks (their Theorem 5). At the settings of the
+#' article's Table 4 (\eqn{\kappa = 0.2}, \code{width = 0.04}, 95\%, one
+#' observation added at each stage) coverage is close to nominal: 0.936 for
+#' normal data and 0.933 for gamma data in 5,000 simulated studies each (the
+#' article reports 0.942 and 0.934), with about 240 observations at the end.
+#' At targets that are wide relative to \eqn{\kappa} the final sample is
+#' small and coverage falls short. With \eqn{\kappa = 0.5}, coverage was
+#' 0.88 for gamma data and 0.79 for lognormal data at \code{width = 0.2}
+#' (10,000 studies each, about 52 and 62 observations at the end), and 0.79
+#' and 0.69 at \code{width = 0.4} (6,000 studies each, about 16
+#' observations). The variance estimate was zero or negative in at most 2\%
+#' of the pilot samples in these conditions, and positive but below
+#' \eqn{n^{-3}}, so that the bound was used and the rule met with an
+#' interval far narrower than requested, in 12 and 20 of the 6,000 studies
+#' at \code{width = 0.4} and in none of 2,000 at \code{width = 0.2}; the
+#' shortfall comes from the small final sample rather than from the bound.
+#' Use
+#' \code{\link{seq_aipe_cv_sensitivity}} to study a planned study before
+#' collecting data.
+#'
+#' @inheritSection seq_aipe_smd Estimates That Are Not Yet Usable
+#'
+#' @param x A numeric vector: the observations collected so far, at least 4
+#'   of them. Missing or infinite values are an error.
+#' @param width The target full width of the confidence interval for
+#'   \eqn{\kappa} (\eqn{\omega} in the cited article): the upper limit minus
+#'   the lower limit, on the scale of the coefficient of variation as a
+#'   proportion (not a percentage). A single positive number.
+#' @param conf_level The confidence level of the interval, a single number
+#'   strictly between 0 and 1. Default 0.95.
+#'
+#' @return An object of class \code{c("smsd_check", "data.frame")} (see
+#'   \code{\link{smsd_check_methods}} for its \code{print()},
+#'   \code{summary()}, and \code{tidy()} methods) with one row per quantity
+#'   and columns \code{term} and \code{value}. The rows are, in order:
+#'   \describe{
+#'     \item{\code{lower_limit}}{the lower confidence limit (\code{NA}
+#'       when the variance estimate is not yet usable or the estimate
+#'       cannot be computed; see the section below);}
+#'     \item{\code{cv}}{the estimated coefficient of variation, as a
+#'       proportion (\code{NA} when the sample mean is zero, negative, or
+#'       positive only by rounding error);}
+#'     \item{\code{upper_limit}}{the upper confidence limit (\code{NA}
+#'       whenever \code{lower_limit} is);}
+#'     \item{\code{xi_squared}}{the estimated asymptotic variance
+#'       \eqn{\hat{\xi}_n^2}, at least \eqn{n^{-3}} (the bound itself
+#'       when the estimate is not yet usable);}
+#'     \item{\code{criterion_n}}{the sample size the stopping rule currently
+#'       requires (at least \code{current_n + 1} when the variance estimate
+#'       is not yet usable or the estimate cannot be computed);}
+#'     \item{\code{current_n}}{the current sample size.}
+#'   }
+#'   The object also carries these attributes:
+#'   \describe{
+#'     \item{\code{is_satisfied}}{\code{TRUE} when the stopping rule is
+#'       met, otherwise \code{FALSE}; never \code{NA}, and always
+#'       identical to \code{current_n >= criterion_n};}
+#'     \item{\code{method}}{the string \code{"coefficient of variation"};}
+#'     \item{\code{current_n}, \code{criterion_n}}{the values in the
+#'       rows of those names;}
+#'     \item{\code{conf_level}, \code{width}}{the values supplied;}
+#'     \item{\code{variance_unusable}}{\code{TRUE} when the raw variance
+#'       estimate is zero, negative, or not finite (see the section below),
+#'       otherwise \code{FALSE};}
+#'     \item{\code{notes}}{a character vector, empty unless something
+#'       needs explaining.}
+#'   }
+#'
+#' @author
+#' Ken Kelley \email{kkelley@@nd.edu},
+#' Francis Bilson Darku \email{fbilsond@@nd.edu},
+#' Bhargab Chattopadhyay \email{bhargab@@iiitvadodara.ac.in}
+#'
+#' @references
+#' Kelley, K., Darku, F. B., & Chattopadhyay, B. (2018). Accuracy in
+#' parameter estimation for a general class of effect sizes: A sequential
+#' approach. \emph{Psychological Methods}, \emph{23}(2), 226--243.
+#' \doi{10.1037/met0000127}
+#'
+#' Chattopadhyay, B., & Kelley, K. (2016). Estimation of the coefficient
+#' of variation with minimum risk: A sequential method for minimizing
+#' sampling error and study cost. \emph{Multivariate Behavioral Research},
+#' \emph{51}(5), 627--648. \doi{10.1080/00273171.2016.1203279}
+#'
+#' Kelley, K. (2007). Sample size planning for the coefficient of variation
+#' from the accuracy in parameter estimation approach. \emph{Behavior
+#' Research Methods}, \emph{39}(4), 755--766. \doi{10.3758/BF03192966}
+#'
+#' Maxwell, S. E., Kelley, K., & Rausch, J. R. (2008). Sample size planning
+#' for statistical power and accuracy in parameter estimation. \emph{Annual
+#' Review of Psychology}, \emph{59}, 537--563.
+#' \doi{10.1146/annurev.psych.59.103006.093735}
+#'
+#' @examples
+#' # How variable are response times (in milliseconds) on a decision task,
+#' # relative to their mean? The aim is a 95% confidence interval for the
+#' # coefficient of variation that is no wider than 0.15.
+#' set.seed(113)
+#' m <- seq_aipe_cv_pilot(width = 0.15)
+#' response_time <- rgamma(m, shape = 6.25, scale = 80)
+#' out <- seq_aipe_cv(response_time, width = 0.15)
+#' out
+#'
+#' # The rule is not met at the pilot. Add one participant at a time and
+#' # check again, until it is.
+#' while (!attr(out, "is_satisfied")) {
+#'   response_time <- c(response_time, rgamma(1, shape = 6.25, scale = 80))
+#'   out <- seq_aipe_cv(response_time, width = 0.15)
+#' }
+#' out
+#'
+#' @seealso \code{\link{seq_aipe_cv_pilot}} for the pilot size,
+#'   \code{\link{seq_aipe_cv_sensitivity}} to simulate the procedure before
+#'   collecting data, and \code{\link{seq_mr_cv}} for the minimum risk
+#'   point estimation counterpart. In \pkg{DMAR}:
+#'   \code{\link[DMAR]{ss_aipe_cv}}, the fixed sample size analog for when a
+#'   planning value of \eqn{\kappa} is available,
+#'   \code{\link[DMAR]{ci_cv}}, and \code{\link[DMAR]{cv}}.
+#' @family seq_aipe_cv
+#' @export
+seq_aipe_cv <- function(x, width, conf_level = 0.95) {
+  x <- .aipe_check_data(x, "x")
+  width <- .check_width(width)
+  conf_level <- .check_conf_level(conf_level)
+  n <- length(x)
+  # The coefficient of variation does not depend on the scale of the data,
+  # which are divided by a power of two of their magnitude so that no sum
+  # of squares can overflow or underflow; see .aipe_scale().
+  x <- x / .aipe_scale(x)
 
-    if (Stop == TRUE){
-      print("The stopping rule has been met; sample size is large enough.")
-      Outcome <- list("Current.n" = n, "Current.cv" = CV,
-                      "Is.Satisfied?" = Stop,
-                      "Confidence Interval"= ci)
-    }
-
+  if (.aipe_mean_positive(x)) {
+    # The estimate is s / xbar whenever the mean is positive, as in
+    # seq_mr_cv(): zero for a sample of equal values (the mean of equal
+    # values is that value exactly, so the standard deviation is exactly
+    # zero), and the small ratio that was computed for a sample that is
+    # constant only by the package's tolerance. Neither has a usable
+    # variance estimate: .var_cv() returns NaN for a sample with no
+    # variation.
+    cv <- stats::sd(x) / mean(x)
+    raw <- .var_cv(x, floor = FALSE)
+  } else {
+    # The coefficient of variation is defined for a positive mean; neither
+    # it nor its variance can be estimated from a sample whose mean is zero,
+    # negative, or positive only by rounding error (centered or standardized
+    # scores, whose mean is about 1e-17 of either sign).
+    cv <- NA_real_
+    raw <- NaN
   }
-  if(pilot==TRUE){
-    if(m0 < 4) stop("The value of 'm0' must be 4 or greater.")
-    Outcome <- max(m0, ceiling(2*stats::qnorm(1 - alpha/2)/omega))
-  }
-  return(Outcome);
+
+  .aipe_result(estimate = cv, raw = raw, n = n, width = width,
+               conf_level = conf_level, term = "cv",
+               method = "coefficient of variation",
+               not_estimable_note =
+                 .note_mean_not_positive("coefficient of variation"))
 }

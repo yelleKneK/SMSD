@@ -1,4 +1,84 @@
+# R and RStudio session files
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
+.DS_Store
+Icon?
+
+# Dotfiles and dot-directories at the root are local and never tracked;
+# the ones that belong to the repository are allowlisted.
+/.*
+!/.gitignore
+!/.Rbuildignore
+!/.github/
+!/.zenodo.json
+
+# Build artifacts
+*.Rcheck/
+SMSD_*.tar.gz
+SMSD_*.tgz
+Rplots.pdf
+/CRAN-SUBMISSION
+tests/*.Rout
+tests/*.Rout.fail
+*.log
+
+# A preview of a top-level document and a manual built at the root
+/*.html
+/*.pdf
+
+# Site and vignette build products (regenerated, never committed)
+/docs/
+/doc/
+/Meta/
+inst/doc/
+vignettes/*.html
+vignettes/*.R
+vignettes/*.log
+vignettes/*.tex
+vignettes/.build.timestamp
+vignettes/*_cache/
+vignettes/*_files/
+vignettes/articles/*.html
+vignettes/articles/*.R
+vignettes/articles/*_files/
+vignettes/articles/*_cache/
+
+# Working documents and scratch scripts at the root are never tracked;
+# the standard package documents are allowlisted.
+/*.docx
+/*.txt
+/*.R
+~$*
+
+# A Markdown file is a working note wherever it lies (beside the code, the
+# tests, the vignettes, or the shipped files in inst/) unless it is one of
+# the package's own documents, which are allowlisted. The intermediate .md
+# files of a vignette build are covered by the same rule. The snapshots
+# that testthat's expect_snapshot() writes are Markdown files and are
+# tracked; the .new.md file it writes beside a snapshot that failed is not.
+# GitHub's community files (a code of conduct, contributing guidelines,
+# issue and pull request templates) are tracked in .github/ or at the root.
+# Any other Markdown file to be tracked is added to this list first.
+*.md
+!/README.md
+!/NEWS.md
+!/LICENSE.md
+!/cran-comments.md
+!/inst/eq26_correction.md
+!/inst/cv_variance_note.md
+!/tests/testthat/_snaps/**/*.md
+/tests/testthat/_snaps/**/*.new.md
+!/.github/**/*.md
+!/CODE_OF_CONDUCT.md
+!/CONTRIBUTING.md
+!/SUPPORT.md
+!/SECURITY.md
+
+# Local development scratch
+/dev/
+
+# testthat scratch output (failed-test snapshots)
+tests/testthat/testthat-problems.rds
+tests/testthat/_problems/

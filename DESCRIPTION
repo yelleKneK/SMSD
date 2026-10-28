@@ -1,12 +1,58 @@
 Package: SMSD
 Type: Package
 Title: Sequential Methods for Study Design
-Version: 0.0.1
-Authors@R: c(person("Ken", "Kelley", email = "kkelley@nd.edu", role = c("aut", "cre")), person("Francis", "Bilson Darku", email = "fbilsond@nd.edu", role = c("aut")), person("Bhargab", "Chattopadhyay", email = "bhargab@iiitvadodara.ac.in", role = c("aut")))
-Description: SMSD is a package for implementing sequential methods when designing studies. One aspect of SMSD is that it implements many of the methods discussed in N. Mukhopadhyay and B. M. de Silva (2009). Additionally, the methods developed in Kelley, Darku, and Chattopadhyay (2018; 2019) and Chattopadhyay and Kelley (2016; 2017) are implemented. The work of Kelley, Darku, and Chattopadhyay (2018; 2019) and Chattopadhyay and Kelley (2018; 2019) are general, but developed in the context of the managerial, behavioral, and social sciences (e.g., psychology, sociology, economics). Additionally, the MBESS package as well as the BUCSS packages for other aspects of study design complememt SMSD. 
-Maintainer: Ken Kelley  <Jkkelley@nd.edu>
+Version: 1.0.0
+Date: 2026-10-26
+Authors@R: c(
+    person("Ken", "Kelley", email = "kkelley@nd.edu",
+           role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-4756-8360")),
+    person(c("Francis", "Bilson"), "Darku", email = "fbilsond@nd.edu",
+           role = "aut"),
+    person("Bhargab", "Chattopadhyay", email = "bhargab@iiitvadodara.ac.in",
+           role = "aut",
+           comment = c(ORCID = "0000-0001-7713-3125")))
+Maintainer: Ken Kelley <kkelley@nd.edu>
+Description: Procedures for planning a study whose sample size cannot be
+    fixed in advance, because the population values that a sample size
+    formula needs are unknown. The 'SMSD' package implements accuracy in
+    parameter estimation (AIPE) and minimum risk point estimation
+    (MRPE) procedures that collect data in stages and decide whether
+    to keep sampling based on the data so far, along with a budget
+    constrained sequential procedure for K populations. The methods
+    are general; the cited articles develop them in the context of
+    psychology, sociology, education, management, marketing, and
+    information systems. The methods implemented here are developed
+    in Chattopadhyay and Kelley (2016) <doi:10.1080/00273171.2016.1203279>,
+    Chattopadhyay and Kelley (2017) <doi:10.1037/met0000089>, Kelley,
+    Darku, and Chattopadhyay (2018) <doi:10.1037/met0000127>, Kelley,
+    Darku, and Chattopadhyay (2019) <doi:10.1037/met0000203>,
+    Chattopadhyay, Bandyopadhyay, Kelley, and Padalunkal (2025)
+    <doi:10.1037/met0000570>, and Chattopadhyay and De (2016)
+    <doi:10.3390/econometrics4030030>, with foundational treatment in
+    Mukhopadhyay and de Silva (2009, ISBN:9780367386535). The 'SMSD'
+    package complements the 'MBESS' and 'DMAR' packages (Kelley, 2007,
+    <doi:10.3758/BF03192993>) for fixed sample size analysis and the
+    'BUCSS' package (Anderson, Kelley, and Maxwell, 2017,
+    <doi:10.1177/0956797617723724>) for bias and uncertainty corrected
+    sample size planning.
 License: GPL (>= 3)
-Imports: matrixStats, copula
 Encoding: UTF-8
-RoxygenNote: 7.1.1
-
+Language: en-US
+Depends:
+    R (>= 4.0.0),
+    DMAR (>= 1.0.0)
+Imports:
+    generics,
+    graphics,
+    stats,
+    withr (>= 2.4.0)
+Suggests:
+    testthat (>= 3.2.0),
+    knitr,
+    rmarkdown
+Config/testthat/edition: 3
+VignetteBuilder: knitr
+URL: https://kenkelley.org, https://github.com/yelleKneK/SMSD
+BugReports: https://github.com/yelleKneK/SMSD/issues
+Config/roxygen2/version: 8.1.0

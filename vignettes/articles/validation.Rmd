@@ -1,0 +1,1310 @@
+---
+title: "Validation Against Published Results"
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", echo = FALSE)
+
+# The cache is in the repository beside the script that makes it. The path is
+# relative to this article, which is where knitr and pkgdown evaluate it.
+cache <- file.path("..", "..", "data-raw", "validation_results.rds")
+if (!file.exists(cache)) {
+  stop("This article displays data-raw/validation_results.rds, which was not found. ",
+       "Render it from a copy of the repository.", call. = FALSE)
+}
+res <- readRDS(cache)
+if (!isTRUE(attr(res, "scale") == 1) || !identical(attr(res, "only"), "")) {
+  stop("The cached results are from a trial run. Run data-raw/validation_study.R ",
+       "at full size and for every condition.", call. = FALSE)
+}
+
+num <- function(x, d = 2) {
+  out <- formatC(round(x, d) + 0, format = "f", digits = d, big.mark = ",")
+  out[is.na(x)] <- ""
+  out
+}
+int <- function(x) formatC(x, format = "d", big.mark = ",")
+with_se <- function(x, se, d) ifelse(is.na(se), num(x, d), sprintf("%s (%s)", num(x, d), num(se, d)))
+
+# Rows of one family, optionally narrowed by exact kind and by a pattern in
+# the procedure, the condition, the source, or the quantity.
+rows <- function(family, kind = NULL, procedure = NULL, condition = NULL,
+                 source = NULL, quantity = NULL) {
+  x <- res[res$family == family, ]
+  if (!is.null(kind)) x <- x[x$kind %in% kind, ]
+  if (!is.null(procedure)) x <- x[grepl(procedure, x$procedure, fixed = TRUE), ]
+  if (!is.null(condition)) x <- x[grepl(condition, x$condition, fixed = TRUE), ]
+  if (!is.null(source)) x <- x[grepl(source, x$source, fixed = TRUE), ]
+  if (!is.null(quantity)) x <- x[grepl(quantity, x$quantity, fixed = TRUE), ]
+  x
+}
+# Exactly one row, or an error: every number quoted in the text is found by name.
+one <- function(...) {
+  x <- rows(...)
+  if (nrow(x) != 1L) stop("Expected one row, found ", nrow(x), call. = FALSE)
+  x
+}
+
+# One line per condition for an interval procedure: mean final sample size,
+# coverage, and mean width, each beside the published value. `who` names the
+# source of the simulated value: the package, or, where a rule as printed is
+# simulated, "simulated".
+interval_table <- function(x, n_digits = 1, label = "Condition", who = "package") {
+  key <- unique(paste(x$procedure, x$condition, sep = " | "))
+  id <- paste(x$procedure, x$condition, sep = " | ")
+  part <- function(quantity) x[x$quantity == quantity, ][match(key, id[x$quantity == quantity]), ]
+  n <- part("mean final sample size"); p <- part("coverage"); w <- part("mean interval width")
+  out <- data.frame(
+    n$condition, int(n$replications),
+    num(n$published, n_digits), with_se(n$value, n$se, n_digits), num(n$z, 1),
+    num(p$published, 4), with_se(p$value, p$se, 4), num(p$z, 1),
+    num(w$published, 4), num(w$value, 4), num(w$z, 1))
+  knitr::kable(out, align = c("l", rep("r", 10)),
+               col.names = c(label, "Replications", "N, article",
+                             sprintf("N, %s (SE)", who), "z", "Coverage, article",
+                             sprintf("Coverage, %s (SE)", who), "z", "Width, article",
+                             sprintf("Width, %s", who), "z"))
+}
+# One line per row: the quantity, the reference value, the package's value.
+long_table <- function(x, digits = 4, reference = "Published", first = "condition",
+                       first_label = "Condition", show_quantity = TRUE, show_n = FALSE,
+                       quantity_label = "Quantity", value_label = "Package (SE)") {
+  d <- rep_len(digits, nrow(x))
+  out <- data.frame(x[[first]])
+  names <- first_label
+  if (show_quantity) { out <- cbind(out, x$quantity); names <- c(names, quantity_label) }
+  out <- cbind(out, mapply(num, x$published, d),
+               mapply(function(v, s, k) with_se(v, s, k), x$value, x$se, d),
+               ifelse(is.na(x$replications), "", int(x$replications)), num(x$z, 1))
+  names <- c(names, reference, value_label, "Replications", "z")
+  if (show_n) { out <- cbind(out, num(x$mean_n, 1)); names <- c(names, "Mean N") }
+  knitr::kable(out, align = c(rep("l", ncol(out) - 4L - show_n), rep("r", 4L + show_n)),
+               col.names = names)
+}
+within <- function(x, limit = 2) sum(abs(x$z) <= limit, na.rm = TRUE)
+largest <- function(x) num(max(abs(x$z), na.rm = TRUE), 1)
+# The standard deviation over studies behind a mean and its standard error:
+# found here, and implied by the standard error of the published mean.
+sd_here <- function(x) x$se * sqrt(x$replications)
+sd_published <- function(x, replications = 5000) x$published_se * sqrt(replications)
+# A list in a sentence: "a, b, and c".
+listing <- function(x) {
+  if (length(x) < 3L) paste(x, collapse = " and ")
+  else paste0(paste(x[-length(x)], collapse = ", "), ", and ", x[length(x)])
+}
+# Words for a small count.
+count_word <- function(n) if (n == 0) "none" else if (n <= 10) c("one", "two", "three", "four",
+  "five", "six", "seven", "eight", "nine", "ten")[n] else as.character(n)
+# The comparisons of a simulated value from the package with a published
+# simulation value, a population value, or an exact value.
+compared <- res[res$kind %in% c("published simulation", "population value", "exact calculation",
+                                "exact calculation, second run") &
+                  !is.na(res$se) & !is.na(res$z), ]
+```
+
+Every sequential procedure in SMSD comes from a published source, and most
+of those sources report what the procedure does: a simulation table, a worked
+example, or a result that can be computed exactly. This article sets the
+package beside those reports. It shows where the package reproduces them,
+where it does not, where it differs on purpose and why, and, at the end, what
+the procedures do not deliver when the target is wide.
+
+Nothing is simulated when this page is built. The numbers come from one
+script, `data-raw/validation_study.R` in the package's repository, which runs
+each procedure through the package's exported functions and saves the results.
+The page reads that file:
+
+```{r load, echo = TRUE}
+results <- readRDS(file.path("..", "..", "data-raw", "validation_results.rds"))
+dim(results)
+names(results)
+c(date = attr(results, "date"), SMSD = attr(results, "package_version"),
+  seed = attr(results, "seed"))
+```
+
+The study took `r num(attr(res, "minutes") + attr(res, "second_run_minutes"), 0)`
+minutes on `r attr(res, "cores")` cores
+(`r num(attr(res, "processor_minutes") + attr(res, "second_run_processor_minutes"), 0)`
+minutes of processor time). Each simulated condition was run in
+`r attr(res, "parts")` parts with their own seeds, so the results do not
+depend on the number of cores, and the script can be run again to check them
+(see the last section).
+
+## How to Read the Tables
+
+Each table sets a value from a source beside the value the package gives for
+the same condition.
+
+- **The package's value** comes from the exported functions only. Where a
+  `*_sensitivity()` function generates the article's data, that function ran
+  the procedure. Otherwise the pilot function and the check function were
+  called in the loop a study would run: start at the pilot sample size, add
+  one observation, check, and stop the first time the check reports the
+  stopping rule as met.
+- **SE** is the Monte Carlo standard error of the package's value.
+- **z** is the package's value minus the published value, divided by the
+  standard error of that difference. The standard error combines three
+  things: the Monte Carlo error of the package's value, the Monte Carlo error
+  of the published value where that value is itself a simulation mean, and
+  the rounding of the published value to the decimals printed. For the
+  Monte Carlo error of a published mean the study uses the standard error
+  that the article prints. Where an article prints none (the mean widths of
+  the 2018 tables and of the squared multiple correlation tables, for
+  example), it uses the standard error that the spread found in this study
+  gives a mean of the article's 5,000 replications. A value of z between -2
+  and 2 is what chance alone
+  produces 95 times in 100. With several thousand replications on each side
+  the comparison is sharp: a z of 5 can belong to a difference in the fourth
+  decimal.
+- **Replications** is the number of simulated studies behind the package's
+  value. It is empty where the value is not simulated.
+- **N** is the final sample size: the number of observations at which the
+  procedure stopped.
+
+The reproduction sections below hold `r nrow(compared)` comparisons of a
+simulated value from the package with a published simulation value, a
+population value, or an exact value, so a few values of z beyond 2 are
+expected by chance alone even where the package and the source agree exactly.
+(The cached file has `r nrow(res)` rows in all. The others are worked examples
+and closed forms, which have no sampling error; rows in which the package
+departs from its source on purpose, or in which a rule as printed is
+simulated in place of the package's; and rows set beside a nominal level or a
+bound and not beside a published value, most of them in the last section.)
+Where the reference value is exact, a difference of more than
+three standard errors can only be chance or a defect, and the study settles
+which by running that condition a second time, with new seeds and ten times
+the replications; both runs are shown. A row that does not reproduce is shown
+as it is.
+
+## A Narrow Confidence Interval: Kelley, Darku, and Chattopadhyay (2018)
+
+```{r aipe-2018}
+a18 <- rows("aipe_2018")
+smd18 <- one("aipe_2018", condition = "means 10 and 9.5", quantity = "mean final sample size")
+sd18 <- smd18$published_se * sqrt(5000)
+```
+
+Tables 2 to 4 of Kelley, Darku, and Chattopadhyay (2018, pp. 233--234) report
+the mean final sample size, the coverage, and the mean width of the interval
+for the standardized mean difference (95% intervals no wider than 0.2) and for
+the coefficient of variation (90% and 95% intervals no wider than 0.04). The
+rows below are the two normal conditions of Table 2 with standardized mean
+differences of 0.3 and 0.5, and the normal, gamma, and lognormal populations
+with a coefficient of variation of 0.2 from Tables 3 and 4. For the standardized
+mean difference the sample size is per group.
+
+```{r aipe-2018-table}
+interval_table(a18)
+```
+
+Of the `r nrow(a18)` comparisons, `r within(a18)` are within two standard
+errors and the largest difference is `r largest(a18)` standard errors. The
+package reproduces these tables.
+
+One detail of the comparison needs a note. The article's tables print a column
+s(N) described as the standard error of the mean final sample size, and its
+entries are far too small to be that. For the standardized mean difference of
+0.5 the entry is 0.0026, while the standard deviation of the final sample size
+in this study is `r num(sd18, 1)`, which gives a mean of 5,000 replications a
+standard error of `r num(smd18$published_se, 2)`. (The printed entry is close
+to that standard deviation divided by 5,000.) The standard error of each
+published mean final sample size in this section is therefore computed from
+the standard deviation found here and the article's 5,000 replications. The
+tables print no standard error for the mean width, so its standard error is
+computed in the same way.
+
+## Correlation Coefficients: Kelley, Darku, and Chattopadhyay (2019)
+
+```{r corr-2019}
+c19 <- rows("correlations_2019")
+pear <- rows("correlations_2019", procedure = "Pearson")
+kend <- rows("correlations_2019", procedure = "Kendall")
+spear <- rows("correlations_2019", procedure = "Spearman")
+k5 <- one("correlations_2019", procedure = "Kendall", condition = "rho = 0.5",
+          quantity = "mean final sample size")
+k1 <- one("correlations_2019", procedure = "Kendall", condition = "rho = 0.1",
+          quantity = "mean final sample size")
+k5c <- one("correlations_2019", procedure = "Kendall", condition = "rho = 0.5",
+           quantity = "coverage")
+k1c <- one("correlations_2019", procedure = "Kendall", condition = "rho = 0.1",
+           quantity = "coverage")
+p5 <- one("correlations_2019", procedure = "Pearson", condition = "rho = 0.5; width 0.2",
+          quantity = "mean final sample size")
+p5c <- one("correlations_2019", procedure = "Pearson", condition = "rho = 0.5; width 0.2",
+           quantity = "coverage")
+p5w <- one("correlations_2019", procedure = "Pearson", condition = "rho = 0.5; width 0.2",
+           quantity = "mean interval width")
+kn <- rbind(k5, k1)
+kw <- kend[kend$quantity == "mean interval width", ]
+# z for the Kendall means with the spread found here, in place of the
+# article's standard error, behind the article's 5,000 replications.
+z_own <- function(x) {
+  (x$value - x$published) /
+    sqrt(x$se^2 + sd_here(x)^2 / 5000 + (10^-x$published_digits)^2 / 12)
+}
+```
+
+The rows are from Table 2 (Pearson, p. 498), Table 8 (Kendall, p. 502), and
+Table 10 (Spearman, p. 503) of Kelley, Darku, and Chattopadhyay (2019):
+bivariate normal data and 95% intervals. The Pearson rows were run by
+`seq_aipe_r_sensitivity()`; that function studies the Pearson correlation
+only, so the Kendall and Spearman rows were run through `seq_aipe_r_pilot()`
+and `seq_aipe_r()`. The coverage of a rank correlation is counted against its
+own population value (0.3333 for Kendall and 0.4826 for Spearman when &rho; =
+0.5, as the article gives them).
+
+```{r corr-2019-table}
+c19_show <- c19
+c19_show$condition <- sprintf("%s, %s", sub("^.*, ", "", c19$procedure),
+                              sub("^bivariate normal, (.*), 95%$", "\\1", c19$condition))
+interval_table(c19_show)
+```
+
+**Pearson.** The mean final sample sizes are within
+`r largest(pear[pear$quantity == "mean final sample size", ])` standard errors
+of the article's. At &rho; = 0.5 and a width of 0.2 the package's studies run
+slightly longer, cover slightly more often, and end with slightly wider
+intervals than the article's (`r num(p5$value, 1)` against
+`r num(p5$published, 1)` pairs, coverage `r num(p5c$value, 3)` against
+`r num(p5c$published, 3)`, mean width `r num(p5w$value, 4)` against
+`r num(p5w$published, 4)`, the last a difference of `r num(p5w$z, 1)`
+standard errors). All three are the effect of a deliberate departure
+described below: the package does not stop on a variance estimate that is
+zero or negative. Coverage of about 0.90 at a
+nominal 0.95 in that row is the article's own finding, and the package's too.
+It is taken up in the last section.
+
+**Kendall.** The mean final sample sizes and mean widths of these rows do not
+reproduce. The package's mean final sample size is `r num(k5$value, 1)`
+against the article's
+`r num(k5$published, 1)` at &rho; = 0.5 and `r num(k1$value, 1)` against
+`r num(k1$published, 1)` at &rho; = 0.1, differences of `r num(k5$z, 0)` and
+`r num(k1$z, 0)` standard errors. The final sample size also varies far more
+from study to study than the article's standard errors imply: its standard
+deviation is `r num(sd_here(k5), 1)` here against `r num(sd_published(k5), 1)`
+at &rho; = 0.5, about `r num(sd_here(k5) / sd_published(k5), 0)` times as
+large, and `r num(sd_here(k1), 1)` against `r num(sd_published(k1), 1)` at
+&rho; = 0.1, about `r num(sd_here(k1) / sd_published(k1), 0)` times as large.
+(With the spread found here in place of the article's standard errors, the
+two means are still `r num(z_own(k5), 0)` and `r num(z_own(k1), 0)` standard
+errors from the article's.) The differences in the means are small in
+practical terms, about
+`r num(100 * max(kn$value / kn$published - 1), 0)` percent of the sample size
+and at most `r num(max(abs(kw$value - kw$published)), 4)` in mean width, but
+they are far outside Monte Carlo error. Coverage does agree with the
+article's: `r num(k5c$value, 3)` against `r num(k5c$published, 3)` at
+&rho; = 0.5 and `r num(k1c$value, 3)` against `r num(k1c$published, 3)` at
+&rho; = 0.1, differences of `r num(k5c$z, 1)` and `r num(k1c$z, 1)` standard
+errors. The package
+computes the variance estimator of the article's Equations 27 to 29
+(p. 500); its tests compare the code with a transcription of those equations
+and with the large sample value for bivariate normal data. The cause is
+therefore most likely a difference between the printed equations and the
+code behind the article's table, and it cannot be settled without that code.
+
+**Spearman.** The row is reproduced within
+`r largest(spear)` standard errors.
+
+## The Squared Multiple Correlation: Kelley, Darku, and Chattopadhyay (2019)
+
+```{r r2-2019}
+r2 <- rows("r2_2019")
+r2n <- r2[r2$quantity == "mean final sample size", ]
+r2p <- r2[r2$quantity == "coverage", ]
+r2w <- r2[r2$quantity == "mean interval width", ]
+low <- r2p[which.min(r2p$published), ]
+far <- r2n[abs(r2n$z) > 3, ]
+r2_far <- if (nrow(far) == 0L) "" else sprintf(
+  "The %s by more than three standard errors %s within %s observations (%s percent) of the article's.",
+  if (nrow(far) == 1L) "one mean that differs" else paste(nrow(far), "means that differ"),
+  if (nrow(far) == 1L) "is" else "are",
+  num(max(abs(far$value - far$published)), 1),
+  num(100 * max(abs(far$value / far$published - 1)), 1))
+r2w_far <- if (sum(abs(r2w$z) > 3) == 0L) {
+  sprintf("none is more than three (the largest is %s)", largest(r2w))
+} else {
+  sprintf("%s more than three (the largest is %s)",
+          if (sum(abs(r2w$z) > 3) == 1L) "one is" else paste(count_word(sum(abs(r2w$z) > 3)), "are"),
+          largest(r2w))
+}
+```
+
+Tables 11 to 14 of the same article (pp. 504--507) cover the squared multiple
+correlation with multivariate normal data: the log transformed interval at 90%
+(Table 11) and 95% (Table 12), and the Wald interval at 90% (Table 13) and 95%
+(Table 14). The rows below are those with a target width of 0.10, 2 and 5
+predictors, and population values of 0.1, 0.5, and 0.9, run by
+`seq_aipe_R2_sensitivity()`.
+
+```{r r2-2019-table}
+r2_show <- r2
+r2_show$condition <- sprintf("Table %s: %s", sub("^.*Table ([0-9]+).*$", "\\1", r2$source),
+                             sub("; width 0.10", "", r2$condition, fixed = TRUE))
+interval_table(r2_show, n_digits = 2)
+```
+
+Of the `r nrow(r2n)` mean final sample sizes, `r within(r2n)` are within two
+standard errors of the article's and `r within(r2n, 3)` within three (the
+largest difference is `r largest(r2n)`); of the `r nrow(r2p)` coverages,
+`r within(r2p)` are within two and `r within(r2p, 3)` within three (largest
+`r largest(r2p)`). `r r2_far` The mean widths agree with the article's within
+`r num(max(abs(r2w$value - r2w$published)), 4)` in every row: of the
+`r nrow(r2w)` differences, `r within(r2w)` are within two standard errors and
+`r r2w_far`. (The tables print no standard error for the mean width; the one
+used is described under How to Read the Tables.)
+The low coverages in these tables are the
+article's as well as the package's: `r num(low$published, 3)` in the article
+and `r num(low$value, 3)` here for the `r sub(";.*$", "", low$condition)` row of
+the `r sub("^seq_aipe_R2\\(\\), ", "", low$procedure)` at
+`r sub("^.*, ", "", low$condition)`. The Wald
+rows are reproduced by a stopping rule that differs in one sign from the
+article's Equation 63 as printed; see the departures below.
+
+## Minimum Risk for the Coefficient of Variation: Chattopadhyay and Kelley (2016)
+
+```{r mr-cv}
+m16 <- rows("mrpe_cv_2016")
+pub16 <- rows("mrpe_cv_2016", kind = "published simulation")
+ex16 <- rows("mrpe_cv_2016", kind = "worked example")
+```
+
+Table 1 of Chattopadhyay and Kelley (2016, p. 642) gives the mean final sample
+size of the minimum risk procedure for populations with coefficients of
+variation from 0.2 to 0.8 (A = 5,000,000 and c = 10). The article's procedure
+estimates the variance of the sample coefficient of variation with its
+Equation 22, which `seq_mr_cv()` offers as `variance = "published"`. With that
+option the package reproduces the eight rows below:
+
+```{r mr-cv-table}
+pub16_show <- pub16
+pub16_show$condition <- sub("; A = .*$", "", pub16$condition)
+long_table(pub16_show, digits = 2, reference = "Article", first_label = "Population",
+           show_quantity = FALSE)
+```
+
+All `r nrow(pub16)` are within `r largest(pub16)` standard errors. The
+default of `seq_mr_cv()` is a different variance, and gives different sample
+sizes for populations that are not normal; that departure has its own section
+below.
+
+The article's worked example (p. 638) prints the output of its function for 35
+observations with A = 400,000 and c = 75:
+
+```{r mr-cv-example}
+ex16$agree <- abs(ex16$value - ex16$published) <= 0.5 * 10^-ex16$published_digits * (1 + 1e-8)
+knitr::kable(data.frame(ex16$condition, ex16$quantity,
+                        mapply(num, ex16$published, ex16$published_digits),
+                        mapply(num, ex16$value, ex16$published_digits),
+                        ifelse(ex16$agree, "yes", "no")),
+             align = c("l", "l", "r", "r", "l"),
+             col.names = c("Data", "Quantity", "Article", "Package", "Same to the digits printed"))
+```
+
+`r if (all(ex16$agree)) "Every printed value is reproduced, and" else "Not every printed value is reproduced;"`
+`seq_path()` finds the rule first met at
+`r int(one("mrpe_cv_2016", quantity = "first sample size")$value)` observations,
+as the article reports.
+
+## Minimum Risk for the Standardized Mean Difference: Chattopadhyay and Kelley (2017)
+
+```{r mr-smd}
+m17 <- rows("mrpe_smd_2017", kind = "published simulation")
+ex17 <- one("mrpe_smd_2017", kind = "worked example")
+```
+
+Tables 1 and 3 of Chattopadhyay and Kelley (2017, pp. 103--104) give the mean
+final sample size per group of the equal cost procedure for two normal
+populations, at two settings of the loss constant and the cost. They were run
+by `seq_mr_smd_sensitivity()`.
+
+```{r mr-smd-table}
+m17_show <- m17
+m17_show$condition <- sprintf("%s: %s", sub("^.*(Table [0-9]+).*$", "\\1", m17$source),
+                              m17$condition)
+long_table(m17_show, digits = 4, reference = "Article", show_quantity = FALSE)
+```
+
+Of the `r nrow(m17)` means, `r within(m17)` are within two standard errors of
+the article's (largest difference `r largest(m17)`). In the worked example of
+p. 106 (a sample standardized mean difference of 1.00, A = 10,000, c = 2.40)
+the article reports that the rule is met at 75 per group and at no smaller
+sample size; `seq_mr_smd()` first reports it met at
+`r int(ex17$value)`. The article has no simulation table for its procedure
+with two different costs; the script `data-raw/smd_mrpe_simulation.R` in the
+repository checks that procedure against the sample sizes that minimize the
+article's risk function.
+
+## A Contrast Under a Budget: Chattopadhyay, Bandyopadhyay, Kelley, and Padalunkal (2025)
+
+```{r budget}
+closed <- rows("budget_2025", kind = "closed form")
+closed$agree <- abs(closed$value - closed$published) <=
+  0.5 * 10^-closed$published_digits * (1 + 1e-8)
+miss <- closed[!closed$agree, ]
+stopifnot(nrow(miss) == 1L, grepl("mixture", miss$condition),
+          grepl("minimum variance", miss$quantity))
+fp <- rows("budget_2025", procedure = "first_passage")
+re <- rows("budget_2025", procedure = "reallocate")
+lit <- rows("budget_2025", kind = "rule as printed")
+part_of <- function(x, quantity) {
+  y <- x[grepl(quantity, x$quantity, fixed = TRUE), ]
+  if (nrow(y) != 1L) stop("Expected one row for: ", quantity, call. = FALSE)
+  y
+}
+fp_n <- fp[grepl("mean final sample size", fp$quantity), ]
+lit_n <- lit[grepl("mean final sample size", lit$quantity), ]
+fp_v <- part_of(fp, "estimated variance"); lit_v <- part_of(lit, "estimated variance")
+fp_c <- part_of(fp, "mean total cost"); re_c <- part_of(re, "mean total cost")
+lit_c <- part_of(lit, "mean total cost")
+fp_both <- rbind(fp_n, fp_v); lit_both <- rbind(lit_n, lit_v)
+v_opt <- one("budget_2025", kind = "closed form", condition = "normal populations",
+             quantity = "minimum variance")
+fp_within <- part_of(fp, "within the budget"); re_within <- part_of(re, "within the budget")
+# The sentences below state these; a cache that no longer supports them stops the build.
+stopifnot(nrow(fp_n) == 3L, nrow(lit_n) == 3L, all(abs(fp_n$z[1:2]) < 2), fp_n$z[3] > 2,
+          abs(fp_v$z) > 3, abs(lit_v$z) > 3, max(abs(lit_n$z)) > 3,
+          max(abs(lit_n$z)) >= max(abs(fp_n$z)), abs(lit_c$z) < 2)
+```
+
+**Optimal allocation.** `seq_budget_optimal()` gives the sample sizes and the
+variance that the article derives for known standard deviations. The example
+of p. 430 (three groups, 30 per observation, a budget of 10,000) and the
+optimal sample sizes and minimum variances of all four blocks of Table 1
+(p. 431; a budget of 5,000 and weights 1, -2, 1) make
+`r nrow(closed)` printed values, and the package agrees with
+`r sum(closed$agree)` of them to the last digit printed:
+
+```{r budget-closed}
+knitr::kable(data.frame(sub("; budget.*$", "", closed$condition), closed$quantity,
+                        mapply(num, closed$published, closed$published_digits),
+                        mapply(num, closed$value, closed$published_digits),
+                        ifelse(closed$agree, "yes", "no")),
+             align = c("l", "l", "r", "r", "l"),
+             col.names = c("Design", "Quantity", "Article", "Package", "Same to the digits printed"))
+```
+
+The one exception is the minimum variance of the mixture block, printed as
+`r num(miss$published, 4)`. The article's own formula gives
+`r num(miss$value, 4)` for the standard deviations that reproduce that
+block's three sample sizes, so the printed value appears to be a misprint.
+
+**The sequential procedure.** For the normal block of Table 1 the article
+reports the mean final sample size of each group and the mean of the estimated
+variance over 5,000 studies with a pilot sample of 10 per group (p. 432).
+`seq_budget_sensitivity()` ran the same design under both of the package's
+procedures. `procedure = "first_passage"` is the package's reading of the
+article's rule, in which a group is closed for good the first time it meets
+its criterion; `procedure = "reallocate"`, the default, judges every group on
+the current data at every step. The first passage option is not a step for
+step copy of the article's sequence (the help page of `seq_budget_next()`
+lists three differences), so the study also ran that sequence itself, written
+out step for step from pp. 429--430 of the article in base R with no package
+code. It is the third block of the table.
+
+```{r budget-sim}
+both <- rbind(fp, re, lit)
+both <- both[both$kind != "nominal level", ]
+both$condition <- ifelse(grepl("first_passage", both$procedure), "`first_passage`",
+                         ifelse(grepl("reallocate", both$procedure), "`reallocate`",
+                                "Article's sequence, step for step"))
+long_table(both, reference = "Article", first_label = "Procedure",
+           value_label = "Simulated (SE)",
+           digits = ifelse(grepl("percent", both$quantity), 0,
+                           ifelse(grepl("variance", both$quantity), 4,
+                                  ifelse(grepl("cost", both$quantity), 1, 3))))
+```
+
+The article's table prints no mean cost. The value in the "Article" column
+of those rows is the cost its mean final sample sizes imply: the sum over the
+groups of the cost of an observation (38, 15, and 10) times the mean final
+sample size. For the estimated variance the table prints a mean absolute
+deviation (0.0285) and no standard error; z uses a standard error
+for the article's mean taken from it by the relation that holds for a normal
+variable.
+
+The table is reproduced only in part, and the article's own sequence does
+not reproduce it either. With the first passage rule the mean final sample
+sizes of the first two groups agree with the article's
+(`r num(fp_n$z[1], 1)` and `r num(fp_n$z[2], 1)` standard errors) and that of
+the third is higher (`r num(fp_n$value[3], 2)` against
+`r num(fp_n$published[3], 2)`, `r num(fp_n$z[3], 1)` standard errors); the
+mean of the estimated variance is `r num(fp_v$value, 4)` where the article
+reports `r num(fp_v$published, 4)` (`r num(fp_v$z, 1)` standard errors); the
+smallest attainable variance for this design is `r num(v_opt$value, 4)`. The
+article's sequence, step for step, is no closer: its mean final sample sizes
+are `r listing(num(lit_n$z, 1))` standard errors from the table's, and its
+mean estimated variance is `r num(lit_v$value, 4)`
+(`r num(lit_v$z, 1)`). The differences are small, at most
+`r num(100 * max(abs(fp_both$value / fp_both$published - 1)), 1)` percent for
+the first passage option and
+`r num(100 * max(abs(lit_both$value / lit_both$published - 1)), 1)` percent
+for the article's sequence, but the largest are outside Monte Carlo error
+under both, so the package's reading of the sequence is not what separates
+it from the table. What does could not be determined from the article. The
+cost that the table implies is reproduced by the article's sequence, which
+spent `r num(lit_c$value, 1)` of the 5,000 on average against the implied
+`r num(lit_c$published, 1)` (`r num(lit_c$z, 1)` standard errors). The first
+passage option spent `r num(fp_c$value, 1)` (`r num(fp_c$z, 1)`), and the
+default `r num(re_c$value, 1)`.
+
+What the article claims for the procedure does hold: no study exceeded the
+budget (`r num(fp_within$value, 0)` percent within it under the first passage
+rule and `r num(re_within$value, 0)` under the default), and the coverage of
+the 95% interval was
+`r num(one("budget_2025", procedure = "first_passage", quantity = "coverage")$value, 3)`
+and `r num(one("budget_2025", procedure = "reallocate", quantity = "coverage")$value, 3)`.
+The default is the package's choice and not the article's procedure; the
+help page of `seq_budget()` gives the reasons.
+
+## The Gini Index: Chattopadhyay and De (2016)
+
+```{r gini}
+g_pop <- rows("gini_2016", kind = "population value")
+g_sim <- rows("gini_2016", procedure = "seq_aipe_gini_pilot")
+g_row <- function(population, quantity) {
+  x <- g_sim[grepl(paste0("^", population), g_sim$condition) &
+               grepl(quantity, g_sim$quantity, fixed = TRUE), ]
+  if (nrow(x) != 1L) stop("Expected one row for: ", population, call. = FALSE)
+  x
+}
+populations <- c("gamma", "lognormal", "Pareto")
+g_n <- do.call(rbind, lapply(populations, g_row, "mean final sample size"))
+g_art <- do.call(rbind, lapply(populations, g_row, "the article's interval"))
+g_pkg <- do.call(rbind, lapply(populations, g_row, "the package reports"))
+gam_n <- g_n[1, ]; log_n <- g_n[2, ]; par_n <- g_n[3, ]
+# The smallest and largest final sample sizes found here, and the largest in
+# the posted version, from the note of the row.
+range_of <- function(x) as.numeric(regmatches(x$note, gregexpr("[0-9]+", x$note))[[1]])
+gam_range <- range_of(gam_n)
+# The sentences below state these; a cache that no longer supports them stops the build.
+stopifnot(length(gam_range) == 3L, nrow(g_pop) == 6L, nrow(g_sim) == 9L,
+          abs(log_n$z) < 2, abs(par_n$z) < 2, abs(gam_n$z) > 3)
+# The optimal fixed sample size of the article (the smallest n that is at
+# least z^2 xi^2 / d^2) at a half width of 0.01 and 90%, from the population
+# variances, in the order gamma, lognormal, Pareto.
+g_xi2 <- g_pop$published[grepl("variance", g_pop$quantity)]
+g_fixed <- floor(qnorm(0.95)^2 * g_xi2 / 0.01^2) + 1
+# The mean width of the interval the package reports, from the note of the row.
+g_width <- as.numeric(sub("^mean width ([0-9.]+),.*$", "\\1", g_pkg$note))
+stopifnot(!anyNA(g_width), g_width[3] < min(g_width[1:2]),
+          max(g_art$value[1:2] - g_pkg$value[1:2]) < 0.01)
+```
+
+The interval for the Gini index is the procedure of Chattopadhyay and De
+(2016). Their simulation study draws from three populations: a gamma
+distribution with shape 2.649 and rate 0.84, a lognormal distribution with
+log mean 2.185 and log standard deviation 0.562, and a Pareto distribution
+with scale 20,000 and shape 5. For each, the study computed the Gini index
+and the asymptotic variance of its estimator (the article's Equation 6) by
+numerical integration, with no package code. The table compares those
+population values with the mean of `gini_index()` and the mean of the
+variance estimate that `seq_aipe_gini()` reports, over
+`r int(g_pop$replications[1])` samples of 2,000 observations.
+
+```{r gini-table}
+long_table(g_pop, digits = 4, reference = "Population value")
+```
+
+The largest difference is `r largest(g_pop)` standard errors: the package
+estimates the quantities the article defines. The population variances can
+themselves be checked against the posted version of the article discussed
+next, whose table prints the optimal fixed sample size for a half width of
+0.01 at 90%: these variances give `r listing(int(g_fixed))` for the three
+populations, and the table prints 1,267, 1,424, and 686.
+
+The sequential procedure itself is compared with the simulation table of the
+version of the article that its authors posted in 2015 (Chattopadhyay & De,
+2015, Table 1, p. 19): 2,000 studies for each population of a 90% interval
+with a half width of 0.01, which is a full width of 0.02 in the package's
+terms, starting from a pilot sample of
+`r ceiling(2 * qnorm(0.95) / 0.02)`. The rows were run through
+`seq_aipe_gini_pilot()` and `seq_aipe_gini()`.
+
+```{r gini-procedure-table}
+g_show <- g_sim
+g_show$condition <- sub(";.*$", "", g_sim$condition)
+g_show$quantity <- sub(" \\(the estimate plus and minus 0.01\\)", "", g_sim$quantity)
+long_table(g_show, digits = ifelse(grepl("coverage", g_sim$quantity), 4, 1),
+           reference = "Posted version", first_label = "Population")
+```
+
+The article's interval is the estimate plus and minus the half width, 0.01.
+`seq_aipe_gini()` reports a different interval, the estimate plus and minus z
+times its estimated standard error, as the package's other procedures do.
+When the rule is met that interval is never wider than the target, and the
+smaller the sample in which the rule is met, the narrower it is. The table
+therefore counts coverage twice in the same studies: for the article's
+interval (the `gini` row plus and minus 0.01), which is what compares with
+the posted table, and for the interval the package reports.
+
+*Final sample size.* The lognormal and Pareto rows are reproduced
+(`r num(log_n$z, 1)` and `r num(par_n$z, 1)` standard errors). The gamma row
+is not. The package's mean final sample size is `r num(gam_n$value, 1)`
+against `r num(gam_n$published, 1)`,
+`r num(100 * (gam_n$value / gam_n$published - 1), 1)` percent higher and
+`r num(gam_n$z, 1)` standard errors away, and its standard deviation is
+`r num(sd_here(gam_n), 0)` where the posted standard error implies
+`r num(sd_published(gam_n, 2000), 0)` (for the lognormal population the two
+are `r num(sd_here(log_n), 0)` and `r num(sd_published(log_n, 2000), 0)`, and
+for the Pareto population `r num(sd_here(par_n), 0)` and
+`r num(sd_published(par_n, 2000), 0)`). The largest final sample sizes are
+similar (`r int(gam_range[2])` here and `r int(gam_range[3])` in the posted
+version), which suggests that the posted gamma studies include final sample
+sizes well below the smallest found here (`r int(gam_range[1])`). The cause
+cannot be settled without the code behind the posted table.
+
+*Coverage.* The article's interval covers `r listing(num(g_art$value, 4))` of
+the time for the gamma, lognormal, and Pareto populations against the posted
+`r listing(sub("0$", "", num(g_art$published, 4)))`
+(`r listing(num(g_art$z, 1))` standard errors). The interval the package
+reports covers `r listing(num(g_pkg$value, 4))`.
+For the gamma and lognormal populations the two intervals hardly differ: the
+package's has a mean width of `r num(g_width[1], 4)` and
+`r num(g_width[2], 4)` where the article's is 0.02. For the Pareto
+population, where the rule is met in smaller samples
+(`r num(par_n$value, 0)` observations on average), its mean width is
+`r num(g_width[3], 4)`, and it covers
+`r num(100 * (g_art$value[3] - g_pkg$value[3]), 1)` percentage points less
+often than the article's interval in the same studies. The coverage of the
+procedure at wide targets is in the last section.
+
+## Two Stage Procedures With Exact Properties
+
+```{r classical}
+cl_all <- rows("classical")
+cl <- cl_all[cl_all$kind == "exact calculation", ]
+cl2 <- cl_all[cl_all$kind == "exact calculation, second run", ]
+flagged <- cl[abs(cl$z) > 3, ]
+stopifnot(nrow(cl) + nrow(cl2) == nrow(cl_all))
+# What the second runs showed, in words.
+second_text <- if (nrow(flagged) == 0L) {
+  "No value was more than three standard errors from its exact value, so no second run was needed."
+} else {
+  pieces <- vapply(seq_len(nrow(flagged)), function(i) {
+    f <- flagged[i, ]
+    g <- cl2[cl2$procedure == f$procedure & cl2$condition == f$condition &
+               cl2$quantity == f$quantity, ]
+    stopifnot(nrow(g) == 1L)
+    sprintf("the %s of `%s` (%s) was %s in the first %s studies, %s standard errors %s the exact %s, and %s in the second %s (z = %s)",
+            f$quantity, f$procedure, sub("^.*; ", "", f$condition), num(f$value, 4),
+            int(f$replications), num(abs(f$z), 1), if (f$z < 0) "below" else "above",
+            num(f$published, 4), num(g$value, 4), int(g$replications), num(g$z, 1))
+  }, character(1))
+  second_of_flagged <- cl2[paste(cl2$procedure, cl2$condition, cl2$quantity) %in%
+                             paste(flagged$procedure, flagged$condition, flagged$quantity), ]
+  paste0("Under the rule described at the top of the page, a condition with a value more than three standard errors from its exact value was run a second time. That happened ",
+         if (nrow(flagged) == 1L) "once: " else paste0(nrow(flagged), " times: "),
+         paste(pieces, collapse = "; "), ". ",
+         if (all(abs(second_of_flagged$z) <= 3))
+           "The second run agrees with the exact value, so the first difference was chance."
+         else "The second run does not agree with the exact value either, which points to a defect.")
+}
+cov_rows <- cl[cl$quantity == "coverage", ]
+risk_rows <- cl[cl$quantity == "risk relative to the bound", ]
+worst <- one("classical", condition = "n* = 44", quantity = "risk relative to the bound")
+```
+
+Four of the two stage procedures from Mukhopadhyay and de Silva (2009) have
+properties that hold exactly, not only in large samples: Stein's (1945)
+interval for a normal mean (`ts_fwd_norm_mean()`), the interval for the
+location of a negative exponential distribution (`ts_fwd_nexp_mean()`), and
+the bounded risk procedures for a normal mean (`ts_br_norm_mean()`) and an
+exponential mean (`ts_br_exp_mean()`; the book's Section 8.3.2, Equation
+8.3.13). In each the total sample size depends on the first stage through one
+statistic whose distribution is known, so the expected sample size and the
+coverage or the risk can be computed exactly. The study does that calculation
+in base R, with no package code, and compares it with what the package's
+functions did in simulated studies: a first stage, the total sample size the
+function asks for, a second stage of that size, and the final interval or
+estimate.
+
+```{r classical-table}
+cl_show <- cl_all
+cl_show$condition <- paste0("`", cl_all$procedure, "` ", cl_all$condition,
+                            ifelse(cl_all$kind == "exact calculation", "", " (second run)"))
+long_table(cl_show, digits = ifelse(cl_all$quantity == "mean total sample size", 2, 4),
+           reference = "Exact")
+```
+
+Of the `r nrow(cl)` simulated values of the first runs, `r within(cl)` are
+within two standard errors of the exact ones and `r within(cl, 3)` within
+three. `r second_text` The exact values themselves show the guarantees: coverage
+is at least 0.95 in every interval row (from
+`r num(min(cov_rows$published), 4)` to `r num(max(cov_rows$published), 4)`),
+and the risk is at most the bound in every bounded risk row (from
+`r num(min(risk_rows$published), 3)` to `r num(max(risk_rows$published), 3)`
+of it). The row with n\* = 44 and a first stage of 14 was chosen because it
+is where `ts_br_exp_mean()` comes closest to its bound: its help page
+reports an exact calculation over first stages of 3 to 100 and values of
+n\* up to 2,000 in which the risk never exceeded the bound and was largest,
+0.990 of it, for a first stage of 14 or 15 with n\* near 44. The exact risk
+in that row is `r num(worst$published, 4)` of the bound. For this procedure
+the bound rests on computation of that kind and not on a theorem, as the
+help page explains.
+
+The other classical procedures (the purely sequential procedures for a mean,
+the purely sequential interval for a median, and the distribution free two
+stage interval) have asymptotic guarantees only. No published table is
+compared for them here; the last section measures them at wide targets.
+
+## Where the Package Departs From an Article
+
+In several places the package does something other than what a source
+article prints. This section gives the evidence for four of them, each
+deliberate and documented in the help page of the function concerned. Three
+more are described elsewhere: the interval that `seq_aipe_gini()` reports,
+which is not the interval of its source article (the section on the Gini
+index above and the last section), the default allocation rule of the budget
+procedure (the section on the budget above and the help page of
+`seq_budget()`), and the power to which one factor is raised in the two cost
+sample sizes of the 2017 article (the help page of `seq_mr_smd()`).
+
+### A Variance Estimate That Is Zero or Negative
+
+```{r dep-unusable}
+du <- rows("departures", source = "Table 2")
+du_printed <- du[du$kind == "rule as printed", ]
+du_package <- du[du$kind == "deliberate departure", ]
+early <- sub("^.*in ([0-9.]+)% of studies$", "\\1", du_printed$note[1])
+```
+
+The estimate of the asymptotic variance on which a stopping rule rests can be
+zero or negative in a small sample. The articles replace it with a small
+positive number, n<sup>-3</sup>, and evaluate the rule, under which a study
+can stop at once with an interval far narrower than its data support. The
+package reports such a check as not met, so sampling continues (a positive
+estimate, however small, is used as the articles prescribe). The study
+followed the same `r int(du_printed$replications[1])` simulated studies under
+both rules for the Pearson correlation at &rho; = 0.5 and a width of 0.2,
+taking the rule as printed from the flag that `seq_aipe_r()` sets when the
+variance estimate is unusable.
+
+```{r dep-unusable-table}
+du_show <- du
+du_show$condition <- ifelse(du$kind == "rule as printed", "Rule as printed", "Package")
+interval_table(du_show, label = "Rule", who = "simulated")
+```
+
+Under the rule as printed, `r early` percent of the studies stopped on an
+unusable variance estimate. With those stops the rule as printed gives the
+article's row (mean final sample size at
+`r num(du_printed$z[du_printed$quantity == "mean final sample size"], 1)`
+standard errors, coverage at
+`r num(du_printed$z[du_printed$quantity == "coverage"], 1)`, mean width at
+`r num(du_printed$z[du_printed$quantity == "mean interval width"], 1)`);
+without them the package's studies are a little longer, cover a little more
+often (`r num(du_package$value[du_package$quantity == "coverage"], 3)` against
+`r num(du_printed$value[du_printed$quantity == "coverage"], 3)`), and end
+with intervals that are wider on average
+(`r num(du_package$value[du_package$quantity == "mean interval width"], 4)`
+against
+`r num(du_printed$value[du_printed$quantity == "mean interval width"], 4)`),
+because the intervals of the early stops were far narrower than the target.
+
+### The Variance of the Coefficient of Variation
+
+```{r dep-cv}
+dc <- rows("departures", condition = "coefficient of variation 0.8")
+mse30 <- one("departures", kind = "sampling variance", source = "Equation 30",
+             condition = "coefficient of variation 0.8")
+mse9 <- one("departures", kind = "sampling variance", source = "Equation 9",
+            condition = "coefficient of variation 0.8")
+dep16 <- rows("mrpe_cv_2016", kind = "deliberate departure")
+dn <- dep16[dep16$quantity == "mean final sample size", ]
+dopt <- dep16[dep16$quantity == "optimal sample size with known parameters", ]
+pn <- pub16[match(dn$condition, pub16$condition), ]
+eff <- function(x) as.numeric(sub("^risk efficiency ([0-9.]+).*$", "\\1", x$note))
+normal_rows <- grepl("^normal", dn$condition)
+gamma_rows <- grepl("^gamma", dn$condition)
+lognormal_rows <- grepl("^lognormal", dn$condition)
+stopifnot(sum(lognormal_rows) == 1L)
+```
+
+Chattopadhyay and Kelley (2016, Equation 9, p. 631) and Kelley, Darku, and
+Chattopadhyay (2018, Equation 30, p. 233) give different expressions for the
+asymptotic variance of the sample coefficient of variation. The 2018
+expression minus the 2016 one is
+(kurtosis &minus; 3) &kappa;<sup>2</sup> (1 &minus; &kappa;<sup>2</sup>) / 4,
+where &kappa; is the coefficient of variation: the two agree when the
+kurtosis of the population is 3, as it is for a normal population (and when
+&kappa; is exactly 1), and differ otherwise. For a gamma population with a
+coefficient of variation of 0.8 the two expressions give
+`r num(mse9$published, 4)` and `r num(mse30$published, 4)`. Simulation
+settles which describes the estimator: n times its mean squared error in
+samples of 2,000 was `r num(mse30$value, 4)` (standard error
+`r num(mse30$se, 4)`).
+
+```{r dep-cv-table}
+dc_show <- dc
+dc_show$condition <- sub("^Kelley, Darku, and Chattopadhyay \\(2018\\), |^Chattopadhyay and Kelley \\(2016\\), ",
+                         "", dc$source)
+dc_show$quantity <- sprintf("%s; %s", dc$procedure, sub("^.*; ", "", dc$condition))
+long_table(dc_show, digits = 4, reference = "Formula", first_label = "Compared with",
+           quantity_label = "Estimate", value_label = "Estimate (SE)")
+```
+
+The simulated value agrees with Equation 30 of the 2018 article and is
+`r num(mse9$z, 0)` standard errors from Equation 9 of the 2016 article. The
+default of `seq_mr_cv()` therefore estimates the 2018 expression, and
+`variance = "published"` estimates the 2016 one, as the last two rows of the
+table confirm. The choice changes the sample size at which the procedure
+stops:
+
+```{r dep-cv-n}
+knitr::kable(data.frame(
+  sub("; A = .*$", "", dn$condition),
+  num(pn$published, 1), num(dopt$published, 0), num(ceiling(dopt$value), 0),
+  num(pn$value, 1), num(dn$value, 1), num(eff(pn), 3), num(eff(dn), 3)),
+  align = c("l", rep("r", 7)),
+  col.names = c("Population", "Mean N, article", "Optimal n, article", "Optimal n, package",
+                "Mean N, published variance", "Mean N, default variance",
+                "Risk efficiency, published", "Risk efficiency, default"))
+```
+
+"Optimal n" is the sample size that minimizes the risk when the population
+is known: the article computes it from its Equation 9 and the package from
+Equation 30, rounded up. For the normal populations the two agree and so do
+the two procedures, within
+`r num(max(abs(dn$value[normal_rows] / pn$value[normal_rows] - 1)) * 100, 1)`
+percent in mean final sample size. For the gamma and lognormal populations
+the article's optimal sample size is too small, and its procedure stops
+early: at a coefficient of variation of 0.8 the published variance stops at a
+mean of `r num(pn$value[grepl("gamma, coefficient of variation 0.8", pn$condition)], 0)`
+observations and the default at
+`r num(dn$value[grepl("gamma, coefficient of variation 0.8", dn$condition)], 0)`,
+where the risk is smallest near
+`r num(ceiling(dopt$value[grepl("gamma, coefficient of variation 0.8", dopt$condition)]), 0)`.
+Risk efficiency is the realized risk divided by the smallest attainable risk
+(standard errors of about `r num(mean(as.numeric(sub("^.*standard error ([0-9.]+).*$", "\\1", dn$note))), 3)`).
+The risk is flat near its minimum, so stopping early costs less than the
+sample sizes suggest: with the published variance the risk efficiency is
+`r num(min(eff(pn)[gamma_rows]), 2)` to `r num(max(eff(pn)[gamma_rows]), 2)` for
+the gamma populations and `r num(eff(pn)[lognormal_rows], 2)` for the lognormal
+one, against `r num(min(eff(dn)[!normal_rows]), 2)` to
+`r num(max(eff(dn)[!normal_rows]), 2)` with the default. The option exists so
+that the article's results, and those of `DMAR::mr_cv()`, which implements the
+article's rule, can be reproduced.
+
+### Equation 26 of the 2018 Article
+
+```{r dep-eq26}
+d26 <- rows("departures", condition = "skewed in opposite directions")
+v26c <- one("departures", kind = "sampling variance", source = "as corrected",
+            condition = "skewed in opposite directions")
+v26p <- one("departures", kind = "sampling variance", source = "as printed",
+            condition = "skewed in opposite directions")
+e26c <- one("departures", kind = "estimator", source = "as corrected",
+            condition = "skewed in opposite directions")
+```
+
+Equation 26 of Kelley, Darku, and Chattopadhyay (2018, p. 232), the
+asymptotic variance of the standardized mean difference, omits a factor of
+one half in its second term. The authors' correction is posted at
+<https://kenkelley.org/wp-content/uploads/articles/Kelley_Darku_Chattopadhyay_Equation_26.pdf>
+and ships with the package (`system.file("eq26_correction.pdf", package =
+"SMSD")`). The two forms differ only when the groups differ in mean and in
+skewness. For two populations with unit variance, a standardized mean
+difference of 0.5, and skewness in opposite directions (a standardized chi
+square with 3 degrees of freedom and its mirror image), the corrected form
+gives `r num(v26c$published, 4)` and the printed form
+`r num(v26p$published, 4)`.
+
+```{r dep-eq26-table}
+d26_show <- d26
+d26_show$condition <- sub("^Kelley, Darku, and Chattopadhyay \\(2018\\), ", "", d26$source)
+d26_show$quantity <- sprintf("%s; %s", d26$procedure, sub("^.*; ", "", d26$condition))
+long_table(d26_show, digits = 4, reference = "Formula", first_label = "Compared with",
+           quantity_label = "Estimate", value_label = "Estimate (SE)")
+```
+
+In samples of 1,000 per group, n times the variance of the sample
+standardized mean difference was `r num(v26c$value, 3)` (standard error
+`r num(v26c$se, 3)`), which is `r num(v26c$z, 1)` standard errors from the
+corrected value and `r num(v26p$z, 0)` from the printed one. The variance
+estimate of `seq_aipe_smd()` averaged `r num(e26c$value, 4)`: it estimates
+the corrected form.
+
+### The Stopping Rule for the Squared Multiple Correlation
+
+```{r dep-r2}
+dr <- rows("departures", condition = "2 predictors, population value 0.9")
+dr13 <- dr[grepl("Table 13", dr$source) & dr$quantity == "mean final sample size", ]
+dr14 <- dr[grepl("Table 14", dr$source) & dr$quantity == "mean final sample size", ]
+pk13 <- one("r2_2019", source = "Table 13", condition = "2 predictors, population value 0.9",
+            quantity = "mean final sample size")
+pk14 <- one("r2_2019", source = "Table 14", condition = "2 predictors, population value 0.9",
+            quantity = "mean final sample size")
+```
+
+For the Wald interval the article's Equation 63 (p. 505), as printed, stops
+at the first n that is at least
+(16 z<sup>2</sup> / w<sup>2</sup>) (R<sup>2</sup> + 1/n) (1 &minus; (R<sup>2</sup> + 1/n))<sup>2</sup>,
+where w is the target width and z the normal quantile for the confidence level. `seq_aipe_R2()` uses
+(R<sup>2</sup> + 1/n) (1 &minus; R<sup>2</sup> + 1/n)<sup>2</sup> in its place:
+the correction 1/n is added inside the second factor, where the printed form
+subtracts it. The two forms differ most when the population value is large.
+The study evaluated the printed form on the estimates that `seq_aipe_R2()`
+reports at each stage, for the two rows with 2 predictors and a population
+value of 0.9:
+
+```{r dep-r2-table}
+dr_show <- dr
+dr_show$condition <- sprintf("%s, %s", sub("^.*(Table [0-9]+).*$", "\\1", dr$source),
+                             sub("^.*, ", "", dr$condition))
+interval_table(dr_show, n_digits = 2, label = "Equation 63 as printed", who = "simulated")
+```
+
+The printed form gives mean final sample sizes of `r num(dr13$value, 2)` and
+`r num(dr14$value, 2)`, which are `r num(abs(dr13$z), 0)` and
+`r num(abs(dr14$z), 0)` standard errors below the article's
+`r num(dr13$published, 2)` and `r num(dr14$published, 2)` and barely above
+the pilot sample sizes of `r ceiling(4 * qnorm(0.95) / 0.10)` and
+`r ceiling(4 * qnorm(0.975) / 0.10)`. The form the package uses gives
+`r num(pk13$value, 2)` and `r num(pk14$value, 2)` for the same rows
+(`r num(pk13$z, 1)` and `r num(pk14$z, 1)` standard errors from the
+article), and reproduces the other Wald rows shown earlier. The package
+therefore implements the form that the article's tables were evidently
+computed with, and its help page says so.
+
+## What the Procedures Do Not Guarantee at Wide Targets
+
+```{r wide}
+wide_all <- rows("wide_targets")
+shown_order <- c("seq_aipe_smd()", "seq_aipe_sm()", "seq_aipe_c()", "seq_aipe_r(), Pearson",
+                 "seq_aipe_r(), Kendall", "seq_aipe_r(), Spearman", "seq_aipe_reg_coef()",
+                 "seq_aipe_cv()", "seq_aipe_gini()", "seq_aipe_R2(), Wald interval",
+                 "ts_fwd_dfr_mean()")
+classical_order <- c("seq_fwd_norm_mean()", "seq_fwd_dfr_mean()", "seq_fwd_nexp_mean()",
+                     "seq_blci_dfr_median()", "seq_br_norm_mean()", "seq_mr_norm_mean()",
+                     "seq_mr_exp_mean()")
+gini_both <- "seq_aipe_gini_pilot(), seq_aipe_gini()"
+stopifnot(all(wide_all$procedure %in% c(shown_order, classical_order, gini_both)))
+# The Gini index with two intervals in the same studies.
+gi <- wide_all[wide_all$procedure == gini_both, ]
+gi_at <- function(width, quantity) {
+  x <- gi[grepl(paste0("width ", width, "$"), gi$condition) &
+            grepl(quantity, gi$quantity, fixed = TRUE), ]
+  if (nrow(x) != 1L) stop("Expected one row for the Gini index at width ", width, call. = FALSE)
+  x
+}
+gi_width <- function(width) sub("^mean width ", "", gi_at(width, "the package reports")$note)
+wd <- wide_all[wide_all$kind == "nominal level" & wide_all$procedure %in% shown_order, ]
+wd <- wd[order(match(wd$procedure, shown_order)), ]
+# The purely sequential classical procedures: coverage rows and risk rows.
+cs <- wide_all[wide_all$procedure %in% classical_order, ]
+cs <- cs[order(match(cs$procedure, classical_order)), ]
+cs_at <- function(procedure, condition) {
+  x <- cs[cs$procedure == procedure & grepl(condition, cs$condition, fixed = TRUE), ]
+  if (nrow(x) != 1L) stop("Expected one row for: ", procedure, " ", condition, call. = FALSE)
+  x
+}
+wide_at <- function(condition, procedure = NULL) {
+  x <- wd[wd$condition == condition, ]
+  if (!is.null(procedure)) x <- x[grepl(procedure, x$procedure, fixed = TRUE), ]
+  if (nrow(x) != 1L) stop("Expected one row for: ", condition, call. = FALSE)
+  x
+}
+cv_of <- function(condition, procedure = NULL) wide_at(condition, procedure)$value
+n_of <- function(condition, procedure = NULL) wide_at(condition, procedure)$mean_n
+dfr_at <- function(population) sprintf("%s, standard deviation 2; half width 0.2, first stage of 30",
+                                       population)
+r2_at <- function(p, width) sprintf("squared multiple correlation 0.5, %d predictors; width %g",
+                                    p, width)
+holds <- wd[grepl("seq_aipe_smd|seq_aipe_sm\\(|seq_aipe_c\\(", wd$procedure), ]
+low_hold <- holds[which.min(holds$value), ]
+stopifnot(low_hold$procedure == "seq_aipe_c()")
+dfr_exact <- rows("wide_targets", kind = "exact calculation")
+```
+
+The sequential intervals for effect sizes deliver the requested width by
+construction: the final interval is never wider than the target. Their
+coverage is a different kind of property. The articles prove that it
+approaches the confidence level as the target width shrinks, that is, as the
+sample the rule asks for grows. They do not prove, and it is not true, that
+coverage is close to the confidence level at every width. When the rule is
+met in a small sample, coverage can be far below nominal.
+
+The table gives the coverage of 95% intervals measured in this study, with
+the default pilot sample size unless the row says otherwise, and the mean
+final sample size (per group for the standardized mean difference and the
+contrast, pairs for the correlations and the slope). "Skewed" data are
+standardized chi square variables with 3 degrees of freedom. The help pages
+of the functions report separate runs of some of these designs, often
+rounded to two decimals. A figure there can differ from the one here by up
+to about 0.02, several times the standard errors shown here, because each
+run has its own Monte Carlo error and some of those runs are smaller than
+these.
+
+```{r wide-table}
+wd_show <- wd
+wd_show$condition <- paste0("`", wd$procedure, "` ", wd$condition)
+knitr::kable(data.frame(wd_show$condition, num(wd$mean_n, 1), with_se(wd$value, wd$se, 3),
+                        int(wd$replications), wd$note),
+             align = c("l", "r", "r", "r", "l"),
+             col.names = c("Procedure and condition", "Mean N", "Coverage (SE)",
+                           "Replications", "Note"))
+```
+
+What the table shows, stated plainly:
+
+- **Where the shortfall is small.** For the standardized mean difference, the
+  standardized mean, and the contrast, coverage is between
+  `r num(min(holds$value), 3)` and `r num(max(holds$value), 3)` in the
+  `r nrow(holds)` conditions above. The lowest is the contrast at a width of
+  `r sub("^.*; width ", "", low_hold$condition)`, which stops with about
+  `r num(low_hold$mean_n, 0)` observations per group.
+- **The Pearson correlation.** At a correlation of 0.4 coverage is
+  `r num(cv_of("correlation 0.4, normal; width 0.4"), 2)` at a width of 0.4 and
+  `r num(cv_of("correlation 0.4, normal; width 0.2"), 2)` at 0.2. A stronger
+  correlation is estimated with less sampling error, so the rule is met
+  sooner and coverage is worse at the same width:
+  `r num(cv_of("correlation 0.8, normal; width 0.4"), 2)` and
+  `r num(cv_of("correlation 0.8, normal; width 0.2"), 2)` at 0.8, and
+  `r num(cv_of("correlation 0.9, normal; width 0.1"), 2)` at a correlation of
+  0.9 with a width of 0.1. Skewed data lower it further
+  (`r num(cv_of("correlation 0.4, skewed; width 0.4"), 2)` at 0.4 and a
+  width of 0.4).
+- **The regression slope** behaves like the correlation:
+  `r num(cv_of("slope 0.5, normal; width 0.4"), 2)` for a slope of 0.5 at a
+  width of 0.4, `r num(cv_of("slope 0.5, skewed; width 0.4"), 2)` with skewed
+  data, and `r num(cv_of("slope 2, normal; width 0.2"), 2)` for a slope of 2
+  at a width of 0.2.
+- **The rank correlations** fall short at a strong association too:
+  `r num(cv_of("bivariate normal, rho = 0.8; width 0.4", "Kendall"), 2)`
+  (Kendall) and
+  `r num(cv_of("bivariate normal, rho = 0.8; width 0.4", "Spearman"), 2)`
+  (Spearman) at &rho; = 0.8 and a width of 0.4.
+- **The coefficient of variation** is sensitive to skewness. At a value of
+  0.5 coverage is `r num(cv_of("coefficient of variation 0.5, gamma; width 0.2"), 2)`
+  for gamma data and
+  `r num(cv_of("coefficient of variation 0.5, lognormal; width 0.2"), 2)` for
+  lognormal data at a width of 0.2, and still
+  `r num(cv_of("coefficient of variation 0.5, lognormal; width 0.1"), 2)` for
+  lognormal data at 0.1, with a mean of
+  `r num(n_of("coefficient of variation 0.5, lognormal; width 0.1"), 0)`
+  observations.
+- **The Gini index** covers
+  `r num(cv_of("Gini index 0.3, lognormal; width 0.2"), 2)` and
+  `r num(cv_of("Gini index 0.3, lognormal; width 0.1"), 2)` of the time at
+  widths of 0.2 and 0.1. That is the interval `seq_aipe_gini()` reports,
+  which is not the interval of Chattopadhyay and De (2016); the two are set
+  side by side below.
+- **The squared multiple correlation** fails badly when the number of
+  predictors is not small beside the sample size the width calls for:
+  for a population value of 0.5 at a width of 0.3 coverage is
+  `r num(cv_of(r2_at(5, 0.3)), 2)` with 5 predictors,
+  `r num(cv_of(r2_at(10, 0.3)), 2)` with 10, and
+  `r num(cv_of(r2_at(15, 0.3)), 2)` with 15, and at a width of 0.2 it is
+  `r num(cv_of(r2_at(10, 0.2)), 2)` with 10.
+  The procedure also assumes multivariate normal data.
+- **The distribution free two stage interval for a mean**
+  (`ts_fwd_dfr_mean()`) plugs the first stage variance into the known
+  variance sample size with no allowance for having estimated it. With a first
+  stage of 30 its coverage for a narrow target is
+  `r num(cv_of(dfr_at("normal")), 3)` for normal data (the exact value is
+  `r num(dfr_exact$published[grepl("half width 0.2", dfr_exact$condition)], 3)`),
+  `r num(cv_of(dfr_at("exponential (skewness 2)")), 3)` for exponential data,
+  and `r num(cv_of(dfr_at("lognormal (skewness 4)")), 3)` for lognormal data
+  with a skewness of 4. Narrowing the target does not remove the shortfall
+  while the first stage stays at 30; a larger first stage reduces it.
+
+### The Gini Index: Two Intervals
+
+```{r wide-gini}
+stopifnot(nrow(gi) == 4L,
+          gi_at("0.2", "the article's")$value > 0.95, gi_at("0.1", "the article's")$value > 0.95,
+          gi_at("0.2", "the package reports")$value < 0.95,
+          gi_at("0.1", "the package reports")$value < 0.95)
+```
+
+The interval of Chattopadhyay and De (2016) is the estimate plus and minus
+half the target width. `seq_aipe_gini()` reports the estimate plus and minus z
+times its estimated standard error, which the stopping rule keeps below the
+target, and well below it when the rule is met in a small sample. The study
+ran the two wide conditions above again through `seq_aipe_gini_pilot()` and
+`seq_aipe_gini()`, with new data, and counted the coverage of both intervals
+in the same studies.
+
+```{r wide-gini-table}
+knitr::kable(data.frame(sub("^Gini index 0.3, ", "", gi$condition),
+                        sub(" \\(the estimate plus and minus half the width\\)", "", gi$quantity),
+                        num(gi$mean_n, 1), with_se(gi$value, gi$se, 3), int(gi$replications),
+                        ifelse(grepl("^mean width", gi$note), gi$note, "")),
+             align = c("l", "l", "r", "r", "r", "l"),
+             col.names = c("Condition", "Quantity", "Mean N", "Coverage (SE)", "Replications",
+                           "Note"))
+```
+
+At a target width of 0.2 the interval the package reports has a mean width
+of `r gi_width("0.2")` and covers
+`r num(gi_at("0.2", "the package reports")$value, 3)` of the time; the
+article's interval covers `r num(gi_at("0.2", "the article's")$value, 3)` in
+the same studies. At 0.1 the two figures are
+`r num(gi_at("0.1", "the package reports")$value, 3)` (mean width
+`r gi_width("0.1")`) and `r num(gi_at("0.1", "the article's")$value, 3)`. At
+these targets the shortfall belongs to the interval the package reports and
+not to the article's procedure, whose interval covers more often than its
+nominal level here. The article's interval can be formed from the package's
+output: it is the `gini` row plus and minus half of `width`, once the rule is
+met.
+
+### The Purely Sequential Classical Procedures
+
+```{r wide-classical}
+fn_wide <- cs_at("seq_fwd_norm_mean()", "half width 0.77")
+fn_narrow <- cs_at("seq_fwd_norm_mean()", "half width 0.25")
+fd_norm <- cs_at("seq_fwd_dfr_mean()", "normal")
+fd_exp <- cs_at("seq_fwd_dfr_mean()", "exponential, standard deviation 2; half width 0.5")
+fd_exp_narrow <- cs_at("seq_fwd_dfr_mean()", "exponential, standard deviation 2; half width 0.25")
+fx <- cs_at("seq_fwd_nexp_mean()", "width 0.24")
+med <- cs[cs$procedure == "seq_blci_dfr_median()", ]
+br2 <- cs_at("seq_br_norm_mean()", "squared error")
+br1 <- cs_at("seq_br_norm_mean()", "absolute error")
+mrn <- cs_at("seq_mr_norm_mean()", "normal")
+mre <- cs_at("seq_mr_exp_mean()", "exponential")
+n_star <- function(x) sub("^.*\\(n\\* = ([0-9,]+)\\)$", "\\1", x$condition)
+stopifnot(nrow(med) == 3L)
+```
+
+The purely sequential procedures from Mukhopadhyay and de Silva (2009) check
+their rule after every observation. Their confidence level, their risk bound,
+or their optimality holds in the limit as the target narrows, and none of
+them has a `*_sensitivity()` function, so the study ran each through its
+pilot function and its check function, with the default pilot, at a target
+near the least favorable one that its help page reports. In the table n\* is
+the sample size that would be needed if the population were known. For an
+interval the target is the nominal 0.95. For the bounded risk procedure it is
+a risk of at most 1 times the bound, and for the minimum risk procedures it
+is a risk close to 1 times the smallest attainable.
+
+```{r wide-classical-table}
+knitr::kable(data.frame(paste0("`", cs$procedure, "` ", cs$condition), cs$quantity,
+                        num(cs$mean_n, 1), with_se(cs$value, cs$se, 3), int(cs$replications)),
+             align = c("l", "l", "r", "r", "r"),
+             col.names = c("Procedure and condition", "Quantity", "Mean N", "Value (SE)",
+                           "Replications"))
+```
+
+- **The fixed width interval for a normal mean** (`seq_fwd_norm_mean()`)
+  covers `r num(fn_wide$value, 3)` of the time when about `r n_star(fn_wide)`
+  observations are needed and `r num(fn_narrow$value, 3)` when about
+  `r n_star(fn_narrow)` are. Stein's two stage interval, `ts_fwd_norm_mean()`,
+  is the alternative whose level is guaranteed.
+- **The distribution free interval for a mean** (`seq_fwd_dfr_mean()`) covers
+  `r num(fd_norm$value, 3)` for normal data when about `r n_star(fd_norm)`
+  observations are needed. For exponential data with the same standard
+  deviation it covers `r num(fd_exp$value, 3)` at that target and
+  `r num(fd_exp_narrow$value, 3)` when about `r n_star(fd_exp_narrow)` are
+  needed: skewness slows the approach to the stated level considerably.
+- **The interval for the location of a negative exponential distribution**
+  (`seq_fwd_nexp_mean()`) covers `r num(fx$value, 3)` when about
+  `r n_star(fx)` observations are needed. Here too the two stage interval,
+  `ts_fwd_nexp_mean()`, has a guaranteed level.
+- **The interval for a median** (`seq_blci_dfr_median()`) has at least its
+  stated coverage at any fixed sample size, but the sequential procedure stops
+  when the interval happens to be short. Its coverage is
+  `r num(min(med$value), 3)` to `r num(max(med$value), 3)` in the
+  `r count_word(nrow(med))` conditions above, and the shortfall does not go
+  away quickly: it is `r num(med$value[which.max(med$mean_n)], 3)` in the
+  condition that ends with about `r num(max(med$mean_n), 0)` observations.
+- **The bounded risk procedure for a normal mean** (`seq_br_norm_mean()`)
+  approaches its bound from above. When the bound calls for about
+  `r n_star(br2)` observations under squared error loss the risk is
+  `r num(br2$value, 2)` times the bound, and when it calls for about
+  `r n_star(br1)` under absolute error loss it is `r num(br1$value, 2)` times
+  the bound. The two stage procedure `ts_br_norm_mean()` keeps its risk at
+  or below the bound for normal data, as the exact results above show.
+- **The minimum risk procedures** attain the smallest risk only in the limit:
+  the risk of `seq_mr_norm_mean()` is `r num(mrn$value, 2)` times the smallest
+  attainable when the best sample size is `r n_star(mrn)`, and that of
+  `seq_mr_exp_mean()` is `r num(mre$value, 2)` times when it is
+  `r n_star(mre)`. (`seq_mr_nexp_mean()` and `seq_mr_dfr_mean_arb()` are not in
+  the study; their help pages report the same kind of figures.)
+
+### What Helps
+
+A larger pilot sample helps where the shortfall comes from stopping early. A
+minimum pilot sample size of 40 raised coverage from
+`r num(cv_of("correlation 0.4, normal; width 0.4"), 2)` to
+`r num(cv_of("correlation 0.4, normal; width 0.4, m_0 = 40"), 2)` for the
+correlation of 0.4 at a width of 0.4, and from
+`r num(cv_of("slope 0.5, normal; width 0.4"), 2)` to
+`r num(cv_of("slope 0.5, normal; width 0.4, m_0 = 40"), 2)` for the slope of
+0.5, at a cost of
+`r num(n_of("correlation 0.4, normal; width 0.4, m_0 = 40") - n_of("correlation 0.4, normal; width 0.4"), 0)`
+and
+`r num(n_of("slope 0.5, normal; width 0.4, m_0 = 40") - n_of("slope 0.5, normal; width 0.4"), 0)`
+more pairs on average. It is not a cure for a strong relationship or for
+skewed data.
+
+The practical rule follows from the tables. Before relying on an interval at
+a planned width, run the matching `*_sensitivity()` function at each true
+value that is plausible for the study, the strongest included, with data as
+skewed as the study's are likely to be, and read its `coverage` row. If
+coverage is low, plan a narrower width, a larger minimum pilot sample size,
+or both. For a classical procedure, which has no such function, the help
+page gives its measured coverage or risk over a range of targets, and where a
+two stage procedure with an exact guarantee exists it is named there.
+
+## Reproducing This Article
+
+The study is one script. From the root of the package's repository, with
+the package's source loaded or the package installed:
+
+```r
+Rscript -e 'devtools::load_all(quiet = TRUE); source("data-raw/validation_study.R")'
+```
+
+It writes `data-raw/validation_results.rds`, a data frame with one row per
+comparison (the procedure, the source with its table and page, the
+condition, the published value and its standard error, the package's value
+and its standard error, the number of replications, and z), with the seed,
+the date, and the package version as attributes. The replication counts are
+in the tables above; the cached file was made on `r attr(res, "date")` with
+SMSD `r attr(res, "package_version")` under `r attr(res, "r_version")`. Every
+part of every condition sets its own seed, so a second run of the script
+gives the same numbers. The script uses 6 cores unless the environment
+variable `SMSD_VALIDATION_CORES` says otherwise. On Windows, where R cannot
+run the parts as forked processes, it uses one core and takes several hours.
+The script's header describes settings for a shorter trial run or for some
+conditions only; this article refuses a cache made that way.
+
+## References
+
+Chattopadhyay, B., Bandyopadhyay, T., Kelley, K., & Padalunkal, J. J.
+(2025). A sequential approach for noninferiority or equivalence of a
+linear contrast under cost constraints. *Psychological Methods, 30*(2),
+425--439. [doi:10.1037/met0000570](https://doi.org/10.1037/met0000570)
+
+Chattopadhyay, B., & De, S. K. (2015). *Estimation of Gini index within
+pre-specified error bound*. arXiv. [arXiv:1503.08156v1](https://arxiv.org/abs/1503.08156v1)
+
+Chattopadhyay, B., & De, S. K. (2016). Estimation of Gini index within
+pre-specified error bound. *Econometrics, 4*(3), 30.
+[doi:10.3390/econometrics4030030](https://doi.org/10.3390/econometrics4030030)
+
+Chattopadhyay, B., & Kelley, K. (2016). Estimation of the coefficient of
+variation with minimum risk: A sequential method for minimizing sampling
+error and study cost. *Multivariate Behavioral Research, 51*(5), 627--648.
+[doi:10.1080/00273171.2016.1203279](https://doi.org/10.1080/00273171.2016.1203279)
+
+Chattopadhyay, B., & Kelley, K. (2017). Estimating the standardized mean
+difference with minimum risk: Maximizing accuracy and minimizing cost with
+sequential estimation. *Psychological Methods, 22*(1), 94--113.
+[doi:10.1037/met0000089](https://doi.org/10.1037/met0000089)
+
+Kelley, K., Darku, F. B., & Chattopadhyay, B. (2018). Accuracy in parameter
+estimation for a general class of effect sizes: A sequential approach.
+*Psychological Methods, 23*(2), 226--243. [doi:10.1037/met0000127](https://doi.org/10.1037/met0000127)
+
+Kelley, K., Darku, F. B., & Chattopadhyay, B. (2019). Sequential accuracy
+in parameter estimation for population correlation coefficients.
+*Psychological Methods, 24*(4), 492--515. [doi:10.1037/met0000203](https://doi.org/10.1037/met0000203)
+
+Mukhopadhyay, N., & de Silva, B. M. (2009). *Sequential methods and
+their applications*. Chapman & Hall/CRC. ISBN:9780367386535
+
+Stein, C. (1945). A two-sample test for a linear hypothesis whose power is
+independent of the variance. *The Annals of Mathematical Statistics, 16*(3),
+243--258.
+[doi:10.1214/aoms/1177731088](https://doi.org/10.1214/aoms/1177731088)

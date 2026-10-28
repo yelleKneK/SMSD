@@ -1,41 +1,45 @@
-#' mu13
-#'
-#' This an internal function called by other functions.
-#'
-#' @param x The first vector
-#' @param y The second vector
-#' @param na.rm This parameter controls whether NA values are removed from
-#' the vector. Default is \code{FALSE}.
-#'
-#' @return The calculated value for use in other functions.
-#'
-#' @author Ken Kelley \email{kkelley@nd.edu},
-#' Francis Bilson Darku \email{fbilsond@nd.edu},
-#' Bhargab Chattopadhyay \email{bhargab@iimv.ac.in}
-#'
-#' @examples
-#' x <- c(1:4)
-#' y <- c(2:5)
-#' mu13(x,y)
-#'
-#' @export mu13
-#'
-mu13 <- function(x,y, na.rm = FALSE) {
-  if(na.rm){
-    x <- x[!is.na(x)]
-    y <- y[!is.na(y)]
+# Estimator of the joint central moment mu_13 = E[(X - mu_X) (Y - mu_Y)^3]
+# used by the Pearson correlation variance estimator:
+#
+#   mu13_hat = k13 + 3 k02 k11,
+#
+# Kelley, Darku, and Chattopadhyay (2019, Equation 73), where k02 is the
+# sample variance of y, k11 the sample covariance, and k13 the bivariate
+# k-statistic (the unbiased estimator of the joint cumulant kappa_13; their
+# Equation 74). Internal; not exported.
+#
+# x, y: paired numeric vectors with at least 4 pairs.
+# na.rm: drop a pair when either member is missing? Default FALSE.
+#
+# As in .mu22(), the k-statistic is evaluated on the centered data, where
+# Equation 74 reduces to
+#
+#   k13 = n { (n + 1) S13 - 3 (n - 1)/n S11 S02 } / ((n - 1)(n - 2)(n - 3)),
+#
+# with S_pq the sums of products of the centered values; the raw power sum
+# form loses all precision when a mean is large relative to its standard
+# deviation. k13 is exactly unbiased for kappa_13; mu13_hat is consistent
+# but not unbiased.
+#
+# Authors: Ken Kelley, Francis Bilson Darku, Bhargab Chattopadhyay.
+#' @noRd
+.mu13 <- function(x, y, na.rm = FALSE) {
+  if (na.rm) {
+    ok <- !is.na(x) & !is.na(y)
+    x <- x[ok]
+    y <- y[ok]
   }
-  dat <- cbind(x,y)
-  n <- length(x)
+  n <- as.numeric(length(x))
+  dx <- .aipe_center(x)
+  dy <- .aipe_center(y)
+  s02 <- sum(dy^2)
+  s11 <- sum(dx * dy)
+  s13 <- sum(dx * dy^3)
 
-  k02 <- stats::var(y)
-  k11 <- stats::cov(x, y)
-  k13 <- n/((n-1)*(n-2)*(n-3)) * (
-    (n+1)*s(dat, 1,3) - (n+1)/n*s(dat, 0,3)*s(dat, 1,0) -
-      3*(n-1)/n*s(dat, 1,1)*s(dat, 0,2) - 3*(n+1)/n*s(dat,1,2)*s(dat,0,1) +
-      6/n*s(dat, 1,1)*s(dat, 0,1)^2 + 6/n*s(dat, 0,2)*s(dat, 0,1)*s(dat, 1,0)
-    - 6/n^2*s(dat,1,0)*s(dat,0,1)^3
-  )
+  k02 <- s02 / (n - 1)
+  k11 <- s11 / (n - 1)
+  k13 <- n / ((n - 1) * (n - 2) * (n - 3)) *
+    ((n + 1) * s13 - 3 * (n - 1) / n * s11 * s02)
 
-  return(k13 + 3*k02*k11)
+  k13 + 3 * k02 * k11
 }

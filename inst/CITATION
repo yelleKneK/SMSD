@@ -1,0 +1,123 @@
+citHeader(
+  "To cite the SMSD package, use the package entry below. When you use a ",
+  "specific method, please also cite the article that developed it."
+)
+
+# 'meta' holds the fields of the package's DESCRIPTION when citation("SMSD")
+# reads this file, and is empty when the file is read on its own with
+# utils::readCitationFile(); either way the package entry is complete.
+year <- if (is.null(meta$Date)) format(Sys.Date(), "%Y") else
+  sub("-.*", "", meta$Date)
+note <- if (is.null(meta$Version)) "R package" else
+  paste("R package version", meta$Version)
+
+bibentry(
+  bibtype = "Manual",
+  title   = "{SMSD}: Sequential Methods for Study Design",
+  author  = c(person("Ken", "Kelley"),
+              person(c("Francis", "Bilson"), "Darku"),
+              person("Bhargab", "Chattopadhyay")),
+  year    = year,
+  note    = note,
+  url     = "https://github.com/yelleKneK/SMSD"
+)
+
+bibentry(
+  bibtype = "Article",
+  title   = paste("Accuracy in parameter estimation for a general class of",
+                  "effect sizes: A sequential approach"),
+  author  = c(person("Ken", "Kelley"),
+              person(c("Francis", "Bilson"), "Darku"),
+              person("Bhargab", "Chattopadhyay")),
+  journal = "Psychological Methods",
+  year    = "2018",
+  volume  = "23",
+  number  = "2",
+  pages   = "226--243",
+  doi     = "10.1037/met0000127",
+  header  = paste("Sequential accuracy in parameter estimation for the",
+                  "standardized mean difference, the coefficient of variation,",
+                  "the regression slope, the standardized mean, and a contrast:")
+)
+
+bibentry(
+  bibtype = "Article",
+  title   = paste("Sequential accuracy in parameter estimation for",
+                  "population correlation coefficients"),
+  author  = c(person("Ken", "Kelley"),
+              person(c("Francis", "Bilson"), "Darku"),
+              person("Bhargab", "Chattopadhyay")),
+  journal = "Psychological Methods",
+  year    = "2019",
+  volume  = "24",
+  number  = "4",
+  pages   = "492--515",
+  doi     = "10.1037/met0000203",
+  header  = paste("Sequential accuracy in parameter estimation for correlation",
+                  "coefficients and the squared multiple correlation",
+                  "coefficient:")
+)
+
+bibentry(
+  bibtype = "Article",
+  title   = "Estimation of {G}ini index within pre-specified error bound",
+  author  = c(person("Bhargab", "Chattopadhyay"),
+              person(c("S.", "K."), "De")),
+  journal = "Econometrics",
+  year    = "2016",
+  volume  = "4",
+  number  = "3",
+  pages   = "30",
+  doi     = "10.3390/econometrics4030030",
+  header  = "Sequential accuracy in parameter estimation for the Gini index:"
+)
+
+bibentry(
+  bibtype = "Article",
+  title   = paste("Estimation of the coefficient of variation with minimum",
+                  "risk: A sequential method for minimizing sampling error",
+                  "and study cost"),
+  author  = c(person("Bhargab", "Chattopadhyay"),
+              person("Ken", "Kelley")),
+  journal = "Multivariate Behavioral Research",
+  year    = "2016",
+  volume  = "51",
+  number  = "5",
+  pages   = "627--648",
+  doi     = "10.1080/00273171.2016.1203279",
+  header  = "Minimum risk point estimation of the coefficient of variation:"
+)
+
+bibentry(
+  bibtype = "Article",
+  title   = paste("Estimating the standardized mean difference with minimum",
+                  "risk: Maximizing accuracy and minimizing cost with",
+                  "sequential estimation"),
+  author  = c(person("Bhargab", "Chattopadhyay"),
+              person("Ken", "Kelley")),
+  journal = "Psychological Methods",
+  year    = "2017",
+  volume  = "22",
+  number  = "1",
+  pages   = "94--113",
+  doi     = "10.1037/met0000089",
+  header  = "Minimum risk point estimation of the standardized mean difference:"
+)
+
+bibentry(
+  bibtype = "Article",
+  title   = paste("A sequential approach for noninferiority or equivalence of",
+                  "a linear contrast under cost constraints"),
+  author  = c(person("Bhargab", "Chattopadhyay"),
+              person("Tathagata", "Bandyopadhyay"),
+              person("Ken", "Kelley"),
+              person(c("Jishnu", "J."), "Padalunkal")),
+  journal = "Psychological Methods",
+  year    = "2025",
+  volume  = "30",
+  number  = "2",
+  pages   = "425--439",
+  doi     = "10.1037/met0000570",
+  header  = paste("The budget constrained sequential procedure for a contrast",
+                  "across K populations:")
+)

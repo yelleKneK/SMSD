@@ -1,0 +1,699 @@
+---
+title: "Budget Constrained Sequential Procedures for K Populations"
+output:
+  rmarkdown::html_vignette:
+    mathjax: null
+vignette: >
+  %\VignetteIndexEntry{Budget Constrained Sequential Procedures for K Populations}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+library(SMSD)
+fixed <- function(x, digits) formatC(x, digits = digits, format = "f")
+```
+
+## The Research Question
+
+A large organization trains new employees face to face at a central
+site. Two cheaper formats are proposed: one-on-one video calls, and a
+hybrid of recorded material followed by a shorter call. Face to face
+training costs far more per trainee than either alternative, because of
+travel and lodging. The organization will spend a fixed amount on a study
+and wants to know whether the average of the two alternatives is no
+worse than the face to face format by more than a margin that matters,
+or is equivalent to it within such a margin. This is the application
+that motivates Chattopadhyay, Bandyopadhyay, Kelley, and Padalunkal
+(2025), and the same structure arises whenever several groups with
+unequal sampling costs are compared under a fixed budget: multisite
+program evaluations in education, marketing experiments across regions,
+surveys that compare strata.
+
+With μ<sub>1</sub> the mean score after face to face training and
+μ<sub>2</sub> and μ<sub>3</sub> the means after the two alternatives, the
+quantity of interest is the contrast (Equation 1 of the article)
+
+<p style="text-align: center;">&psi; = &minus;&mu;<sub>1</sub> + &frac12; &mu;<sub>2</sub> + &frac12; &mu;<sub>3</sub></p>
+
+How should the budget be divided among the three groups so that ψ is
+estimated as precisely as possible? The answer depends on the population
+variances, which are unknown before the study. A fixed sample size plan
+has to take them from a guess or from a separate pilot study (the
+approach of Luh & Guo, 2016). The sequential procedure learns them from
+the data as the data arrive, in the purely sequential tradition surveyed
+by Mukhopadhyay and de Silva (2009), and it counts the pilot observations
+against the same budget and uses them in the analysis.
+
+## The Method
+
+Take a contrast ψ of *K* population means with weights
+*c*<sub>*i*</sub>, the sum over the populations of *c*<sub>*i*</sub>
+μ<sub>*i*</sub>. Its estimate is the same weighted sum of the sample
+means, and the variance of the estimate is the sum of
+*c*<sub>*i*</sub><sup>2</sup> σ<sub>*i*</sub><sup>2</sup> /
+*n*<sub>*i*</sub>, where σ<sub>*i*</sub> is the standard deviation of
+population *i* and *n*<sub>*i*</sub> its sample size. An observation from
+population *i* costs *a*<sub>*i*</sub>, and the total budget is
+*A*<sub>0</sub>. Theorem 1 of the article gives the sample sizes that
+minimize the variance when the total cost, the sum of *a*<sub>*i*</sub>
+*n*<sub>*i*</sub>, equals the budget (its Equation 12),
+
+<p style="text-align: center;"><i>n</i><sub><i>i</i>0</sub> = <i>A</i><sub>0</sub> |<i>c</i><sub><i>i</i></sub>| &sigma;<sub><i>i</i></sub> / (&radic;<i>a</i><sub><i>i</i></sub> &times; &Sigma;<sub><i>l</i></sub> |<i>c</i><sub><i>l</i></sub>| &sigma;<sub><i>l</i></sub> &radic;<i>a</i><sub><i>l</i></sub>)</p>
+
+and the minimized variance (Equation 13),
+
+<p style="text-align: center;"><i>V</i><sub><i>o</i></sub> = (&Sigma;<sub><i>i</i></sub> |<i>c</i><sub><i>i</i></sub>| &sigma;<sub><i>i</i></sub> &radic;<i>a</i><sub><i>i</i></sub>)<sup>2</sup> / <i>A</i><sub>0</sub></p>
+
+A group receives more observations when its scores vary more, when its
+weight in the contrast is larger, and when it is cheaper to sample.
+Minimizing the variance is what maximizes the power of the tests
+described below.
+
+Because the σ<sub>*i*</sub> are unknown, the sequential procedure
+replaces them with the current sample standard deviations
+*s*<sub>*i*</sub>. Group *i* has met its criterion when its sample size
+*N*<sub>*i*</sub> satisfies (Equation 18)
+
+<p style="text-align: center;"><i>N</i><sub><i>i</i></sub> &ge; <i>A</i><sub>0</sub> |<i>c</i><sub><i>i</i></sub>| <i>s</i><sub><i>i</i></sub> / (&radic;<i>a</i><sub><i>i</i></sub> &times; &Sigma;<sub><i>l</i></sub> |<i>c</i><sub><i>l</i></sub>| <i>s</i><sub><i>l</i></sub> &radic;<i>a</i><sub><i>l</i></sub>)</p>
+
+and sampling ends when every group has met its criterion or when the
+budget cannot pay for another needed observation. The functions divide
+the work as follows.
+
+| Step | Function |
+|---|---|
+| Plan with assumed standard deviations | `seq_budget_optimal()` |
+| Choose the pilot size | `seq_budget_pilot()` |
+| Check the data in hand | `seq_budget()` |
+| Choose the group for the next observation | `seq_budget_next()` |
+| Decide noninferiority, superiority, inferiority, or equivalence | `decide_seq_budget_*()` |
+| Study the design by simulation before collecting data | `seq_budget_sensitivity()` |
+
+## A Priori Planning
+
+The article's own illustration (p. 430) has three groups, a cost of 30
+per observation in each, and a budget of 10,000. When the products of
+weight and standard deviation, |*c*<sub>*i*</sub>| σ<sub>*i*</sub>, are
+equal, the optimal size is the same in every group:
+
+```{r plan-equal}
+plan <- seq_budget_optimal(
+  contrast_weights = c(-1, 0.5, 0.5),
+  sigmas           = c(1, 2, 2),
+  cost_per_group   = c(30, 30, 30),
+  budget           = 10000
+)
+plan$n_per_group
+plan$minimum_variance
+```
+
+The sizes are not whole numbers, and they cannot simply be rounded up:
+112 per group would cost `r format(3 * 30 * 112, big.mark = ",")`. The
+article rounds to 111 per group, 333 observations in all, at a cost of
+`r format(3 * 30 * 111, big.mark = ",")`. A few units of the budget go
+unspent whenever the unit costs do not divide what is left, and this is
+how the sequential procedure ends as well.
+
+Costs are rarely equal. Suppose face to face training costs 500 per
+trainee (the figure the article uses), a video call 150, and the hybrid
+format 250, with a budget of 50,000 (again the article's figure) and
+scores on a 30 point assessment whose standard deviations are thought to
+be about 3, 3.5, and 2.5:
+
+```{r plan-unequal}
+weights <- c(-1, 0.5, 0.5)
+costs   <- c(500, 150, 250)
+budget  <- 50000
+
+plan <- seq_budget_optimal(
+  contrast_weights = weights,
+  sigmas           = c(3, 3.5, 2.5),
+  cost_per_group   = costs,
+  budget           = budget
+)
+plan$n_per_group
+sum(costs * plan$n_per_group)
+sqrt(plan$minimum_variance)
+```
+
+The face to face group carries twice the weight of either alternative,
+yet it does not receive twice the observations, because each of its
+observations costs two to more than three times as much. The last line
+is the smallest standard error of the contrast estimate that this budget
+can buy if the assumed standard deviations are right.
+
+## The Sequential Workflow
+
+The standard deviations above were guesses. The sequential procedure
+does not need them. It starts with a pilot from every group, which is
+paid for from the same budget. The article requires at least two
+observations per group and advises more, because variance estimates from
+very small samples are unstable (p. 431); its simulations used 10.
+
+```{r pilot}
+m_0 <- seq_budget_pilot(m_0 = 10)
+m_0 * sum(costs)
+```
+
+The pilot costs `r format(m_0 * sum(costs), big.mark = ",")` of the
+`r format(budget, big.mark = ",")`. To have data to work with, the
+scores are simulated here from populations whose true contrast is zero
+(the alternatives are exactly as effective as face to face training on
+average); in a study each new score would come from the next trainee.
+
+```{r seq-first-check}
+set.seed(113)
+true_means <- c(15, 15, 15)
+true_sds   <- c(3, 3.5, 2.5)
+new_score  <- function(g, k = 1) rnorm(k, true_means[g], true_sds[g])
+
+scores <- lapply(1:3, new_score, k = m_0)
+
+out <- seq_budget(scores, weights, cost_per_group = costs, budget = budget)
+out
+attr(out, "n_per_group")
+attr(out, "criterion_per_group")
+attr(out, "remaining_budget")
+seq_budget_next(out)
+```
+
+The weights and costs are matched to the groups by position. If they are
+named and the list of groups is named too, the names must agree in
+order; `seq_budget()` stops otherwise, so that, for example, weights
+typed in the order of the design are not applied to a list that
+`split()` has put in alphabetical order.
+
+After the pilot every group is below its criterion, so sampling
+continues. `seq_budget_next()` names the group that should receive the
+next observation: by default the one furthest below its estimated
+optimal size, among the groups whose next observation the remaining
+budget can pay for. Because it never names a group that cannot be paid
+for, a study that follows it one observation at a time cannot overspend.
+The whole study is then a short loop (the helper `term()` pulls one row
+out of a check, here to record the running cost):
+
+```{r seq-loop}
+term <- function(check, name) check$value[check$term == name]
+
+cost_path <- term(out, "current_total_cost")
+repeat {
+  out <- seq_budget(scores, weights, cost_per_group = costs, budget = budget)
+  g <- seq_budget_next(out)
+  if (is.na(g)) break
+  scores[[g]] <- c(scores[[g]], new_score(g))
+  cost_path <- c(cost_path, term(out, "current_total_cost") + costs[g])
+}
+out
+```
+
+```{r seq-loop-summary}
+attr(out, "n_per_group")
+attr(out, "criterion_per_group")
+max(cost_path) <= budget
+```
+
+```{r cost-path, fig.width = 6, fig.height = 3.6, fig.alt = "Running total cost of the study against the number of observations added after the pilot, rising in steps to the budget line without crossing it."}
+plot(seq_along(cost_path) - 1, cost_path, type = "s",
+     xlab = "Observations added after the pilot",
+     ylab = "Total cost so far", ylim = c(0, budget))
+abline(h = budget, lty = 2)
+```
+
+### Why Sampling Ends With Sizes Below the Criteria
+
+Sampling has ended (`is_satisfied` is `TRUE`) although the current total
+sample size (`r attr(out, "current_n")`) is below the total of the criteria
+(`r attr(out, "criterion_n")`). The note under the printed check gives the
+reason: sampling ended because the budget could not pay for another
+observation that was still needed, not because every group reached its
+criterion.
+The attributes separate the two ways of ending:
+
+```{r why-stopped}
+attr(out, "rule_met")
+attr(out, "budget_exhausted")
+attr(out, "is_satisfied")
+attr(out, "remaining_budget")
+```
+
+`rule_met` is `TRUE` when every group has met its criterion.
+`budget_exhausted` is `TRUE` when at least one group is still below its
+criterion and what is left of the budget cannot pay for one more
+observation from any such group. `seq_budget_next()` returns `NA`
+exactly when one of the two holds, and `is_satisfied` is `TRUE` then
+too, with one exception that is taken up below: a study in which the
+variance of some group is unusable is never reported as satisfied.
+`seq_report()` words the result for a methods section and names the
+ending for what it is:
+
+```{r report}
+seq_report(out)
+```
+
+Ending by the budget is the normal case, not a failure. Multiply each
+right hand side of Equation 18 by its unit cost and add them up: the sum
+is *A*<sub>0</sub>, whatever the standard deviations are. Judged on the
+current data, therefore, every group can be at or above its criterion
+without passing the budget only when each sample size equals its target
+exactly, which requires every target to be a whole number. Otherwise the
+procedure runs until what is left of the budget (here
+`r attr(out, "remaining_budget")`) is less than the cost of any
+observation still needed, just as 333 observations at 30 each leave 10 of
+10,000 unspent in the article's illustration.
+
+```{r short-groups, include = FALSE}
+short <- which(!attr(out, "met_per_group"))
+short_txt <- if (length(short) == 1L) {
+  paste("group", short, "was")
+} else {
+  paste("groups", paste(short, collapse = " and "), "were")
+}
+```
+
+Only the groups that still need observations count. At the end of this
+run `r short_txt` still below the criterion, and a cheaper group that had
+already met its criterion would not have kept the study going.
+Conversely, when the most expensive group can no longer be paid for but a
+cheaper one still needs observations, the study continues with the
+cheaper one.
+
+If the data handed to `seq_budget()` already cost more than the budget
+(a pilot the budget cannot pay for, or a loop that added observations
+without asking `seq_budget_next()`), the check says so in a note and
+sets the attribute `budget_exceeded`:
+
+```{r exceeded}
+over <- seq_budget(scores, weights, cost_per_group = costs, budget = 40000)
+attr(over, "budget_exceeded")
+writeLines(strwrap(attr(over, "notes"), width = 72))
+```
+
+### When Observations Arrive in Batches
+
+`seq_budget_next()` names one group for one observation. A study that
+collects several observations at a time takes them from the group it
+names, but no more than the remaining budget pays for and no more than
+the group is still short of its criterion, and then checks again. The
+loop below does that for batches of up to 10, starting from the same
+pilot scores as the loop above.
+
+```{r batch-loop}
+batch <- 10
+
+set.seed(113)
+batched <- lapply(1:3, new_score, k = m_0)
+repeat {
+  out_b <- seq_budget(batched, weights, cost_per_group = costs,
+                      budget = budget)
+  g <- seq_budget_next(out_b)
+  if (is.na(g)) break
+  affordable <- floor(attr(out_b, "remaining_budget") / costs[g])
+  short <- ceiling(attr(out_b, "criterion_per_group")[g] -
+                     attr(out_b, "n_per_group")[g])
+  batched[[g]] <- c(batched[[g]],
+                    new_score(g, min(batch, affordable, max(1, short))))
+}
+attr(out_b, "n_per_group")
+term(out_b, "current_total_cost")
+attr(out_b, "budget_exceeded")
+```
+
+The study ends within the budget, with
+`r paste(attr(out_b, "n_per_group"), collapse = ", ")` observations in
+the three groups where the loop that checked after every observation
+ended with `r paste(attr(out, "n_per_group"), collapse = ", ")`. A loop
+that adds a whole batch whatever the remaining budget is can overspend;
+the check then sets `budget_exceeded`, as in the example above, and the
+budget constraint no longer holds for its result.
+
+### When a Group Shows No Variation
+
+With a small pilot and coarsely scored data, every observation in a
+group can be the same. Its sample variance is then zero, Equation 18
+gives it a target of zero, and the stopping rule as printed in the
+article would end the sampling from that group with a variance estimate
+of zero. A variance of zero is not an estimate, and `seq_budget()`
+treats it as every check in the package treats an unusable variance,
+which is a deliberate departure from the article: the rule is reported
+as not met, the attribute `variance_unusable` is `TRUE`, and the printed
+notes say so. (The same holds when the scores of a group agree to about
+ten significant digits, so that whatever variance is computed is
+rounding error.)
+
+```{r constant-group}
+ratings <- list(c(4, 4, 4), c(3, 5, 4), c(2, 4, 5))
+flat <- seq_budget(ratings, weights, cost_per_group = costs, budget = budget)
+flat
+attr(flat, "variance_unusable")
+seq_budget_next(flat)
+```
+
+`seq_budget_next()` names such a group whenever no group whose variance
+can be used has fewer observations than it has, so the group is
+sampled at the pace of the least sampled of the others until its scores
+differ; one or two more observations usually settle it. A group that
+really is constant (a ceiling or a floor on the measure) keeps that pace
+to the end, which can take a large part of the budget when the group is
+expensive, and the study ends with `is_satisfied` still `FALSE` and a
+result that the decision functions refuse. If a group shows no variation
+after more than a few observations beyond the pilot, stop and reconsider
+the measure before spending the rest of the budget.
+
+## Hypothesis Decisions
+
+When sampling has ended, the estimate and its standard error are used
+for the test the study was designed for. The four decision functions are
+one family. Each is a one-sided test at level `alpha_level`, 0.05 by
+default as in the article's tables, computed from the contrast estimate
+and its standard error, the square root of the row `variance`;
+equivalence is two such tests. None of them reads the interval printed on
+the check, whose confidence level is two-sided, so the confidence level
+of the check does not enter a decision. Below, SE stands for that
+standard error and *z*<sub>α</sub> for the upper 100α percent point of the
+standard normal distribution (1.645 for α = 0.05).
+
+The article formulates noninferiority with inferiority as the null
+hypothesis (its Equations 6 and 7): for a margin δ > 0 fixed in advance
+(the article's |ψ<sub>0</sub>|), the null hypothesis is ψ ≤ −δ and the
+alternative is ψ > −δ. The null hypothesis is rejected at one-sided level
+α when the estimate is above −δ + *z*<sub>α</sub> SE (Equation C3). The
+formulation assumes that a larger response is better, which is why the
+contrast was written with the face to face format entering negatively.
+The `margin` argument is the size of the margin, a positive number. The
+article illustrates equivalence with a margin of 1.25 points; the same
+margin is used here.
+
+```{r noninferiority}
+decide_seq_budget_noninferiority(out, margin = 1.25)
+```
+
+```{r noninferiority-values, include = FALSE}
+ni <- decide_seq_budget_noninferiority(out, margin = 1.25)
+est <- term(out, "contrast")
+se <- sqrt(term(out, "variance"))
+lower_90 <- est - qnorm(0.95) * se
+upper_90 <- est + qnorm(0.95) * se
+```
+
+The estimate is `r fixed(est, 2)` with a standard error of
+`r fixed(se, 2)`, so the estimate minus 1.645 standard errors, the lower
+limit of a 90 percent interval, is `r fixed(lower_90, 2)`, which is
+`r if (ni) "above" else "not above"` −1.25: inferiority is
+`r if (ni) "rejected, and noninferiority is declared" else "not rejected"`.
+`r if (!ni) "Failing to reject is not evidence of inferiority."`
+
+Equivalence is two one-sided tests, each at level α (Equations 11 and
+C15): the contrast is declared to lie between the margins ψ<sub>1</sub>
+and ψ<sub>2</sub> when the estimate is above ψ<sub>1</sub> +
+*z*<sub>α</sub> SE and below ψ<sub>2</sub> − *z*<sub>α</sub> SE. The two
+margins are given as they are, with their signs.
+
+```{r equivalence}
+decide_seq_budget_equivalence(out, margin_lower = -1.25, margin_upper = 1.25)
+```
+
+```{r equivalence-values, include = FALSE}
+eq <- decide_seq_budget_equivalence(out, margin_lower = -1.25,
+                                    margin_upper = 1.25)
+width_90 <- upper_90 - lower_90
+se_from_zero <- abs(est) / se
+direction <- if (est > 0) "above" else "below"
+eq_txt <- if (eq) {
+  paste("Both limits lie inside the margins, so the formats are declared",
+        "equivalent within 1.25 points.")
+} else {
+  paste0(
+    if (upper_90 >= 1.25) "Its upper limit is above 1.25"
+    else "Its lower limit is below −1.25",
+    ", so equivalence within 1.25 points is not declared. ",
+    if (width_90 < 2.5) paste0(
+      "The interval is not too wide for the margins: it is ",
+      fixed(width_90, 2), " wide, and the band between them is 2.5 wide. ",
+      "It crosses a margin because the estimate in this run lies ",
+      fixed(se_from_zero, 1), " standard errors ", direction,
+      " the true contrast of zero. The scores were simulated from formats ",
+      "that are equally effective, so the failure to declare equivalence ",
+      "is a Type II error of this run and not a verdict on the budget."
+    ) else paste(
+      "The interval is wider than the band between the margins, which is",
+      "2.5 wide, so no estimate could have led to a declaration."
+    )
+  )
+}
+```
+
+The 90 percent interval runs from `r fixed(lower_90, 2)` to
+`r fixed(upper_90, 2)`. `r eq_txt`
+
+How often a study on this budget declares equivalence when the formats
+are equally effective can be worked out before any data are collected.
+The test declares it when the estimate is within 1.25 − *z*<sub>α</sub>
+SE of zero. Take for SE the smallest standard error this budget allows,
+from the plan in the section on a priori planning, and take the estimate
+to be normally distributed around a true contrast of zero:
+
+```{r equivalence-power}
+se_best <- sqrt(plan$minimum_variance)    # smallest standard error
+reach <- 1.25 - qnorm(0.95) * se_best     # declared when |estimate| < reach
+c(reach = reach,
+  noninferiority = pnorm(reach / se_best),
+  equivalence = 2 * pnorm(reach / se_best) - 1)
+```
+
+By this approximation the budget declares noninferiority in about
+`r fixed(100 * pnorm(reach / se_best), 0)` percent of studies and
+equivalence in about `r fixed(100 * (2 * pnorm(reach / se_best) - 1), 0)`
+percent when the true contrast is zero. Equivalence asks more of a study
+than noninferiority does, because the estimate has to stay clear of both
+margins.
+
+The other two functions are the one-sided tests against a single margin,
+which is given with its sign. For a margin *m*,
+`decide_seq_budget_superiority()` tests the null hypothesis ψ ≤ *m*
+against the alternative ψ > *m*. With a positive margin it is the
+article's superiority test (Equations 8 and 9), with a margin of zero it
+asks whether the alternatives are better than face to face training at
+all, and noninferiority is its special case `margin = -abs(delta)`:
+
+```{r superiority}
+decide_seq_budget_superiority(out, margin = -abs(1.25))
+decide_seq_budget_superiority(out, margin = 0)
+```
+
+```{r superiority-values, include = FALSE}
+sup_0 <- decide_seq_budget_superiority(out, margin = 0)
+sup_0_strict <- decide_seq_budget_superiority(out, margin = 0,
+                                              alpha_level = 0.025)
+```
+
+The first line repeats the noninferiority decision, because a contrast
+above −δ and noninferiority with margin δ are the same hypothesis.
+`r if (sup_0) paste0("The second declares the alternatives better than face to face training, because the lower limit of the 90 percent interval (", fixed(lower_90, 2), ") is just above zero. These scores were simulated with a true contrast of zero, so this is a Type I error, which a test at level 0.05 makes in about one study in twenty when the true contrast equals the margin.", if (!eq) " It has the same cause as the failure to declare equivalence: one estimate that came out well above the true value." else "") else "The second does not declare the alternatives better than face to face training, as it should not: these scores were simulated with a true contrast of zero."`
+`decide_seq_budget_inferiority()` is the mirror image, the null
+hypothesis ψ ≥ *m* against the alternative ψ < *m*: it concludes that the
+contrast is below the margin, with that conclusion as the alternative
+hypothesis. It is not the article's noninferiority test, in which
+inferiority is the null hypothesis.
+
+```{r inferiority}
+decide_seq_budget_inferiority(out, margin = 0)
+```
+
+These two tests are the halves of the equivalence test. In the article
+they are its Equations C11 to C14: equivalence between ψ<sub>1</sub> and
+ψ<sub>2</sub> is declared exactly when the superiority test at
+ψ<sub>1</sub> and the inferiority test at ψ<sub>2</sub> both reject.
+
+```{r two-halves}
+decide_seq_budget_superiority(out, margin = -1.25) &&
+  decide_seq_budget_inferiority(out, margin = 1.25)
+```
+
+A stricter test is a smaller `alpha_level`. The limits that a test at
+level α compares with its margins are those of a check computed with
+`conf_level = 1 - 2 * alpha_level`; for the default level that is the 90
+percent interval quoted above.
+
+```{r levels}
+decide_seq_budget_superiority(out, margin = 0, alpha_level = 0.025)
+
+out_90 <- seq_budget(scores, weights, cost_per_group = costs,
+                     budget = budget, conf_level = 1 - 2 * 0.05)
+c(term(out_90, "lower_limit"), term(out_90, "upper_limit"))
+```
+
+At one-sided level 0.025 the alternatives are
+`r if (sup_0_strict) "still" else "no longer"` declared better than face
+to face training.
+
+The level of each test is stated for one decision, made when sampling
+has ended. Asked for a decision earlier, the functions return it with a
+warning that it is provisional.
+
+## What to Expect Before the Study
+
+`seq_budget_sensitivity()` runs the whole procedure many times for
+assumed means, standard deviations, costs, and budget, and reports what
+it delivers. Here the alternatives are taken to be exactly as effective
+as face to face training, so the rejection rate of the noninferiority
+test is its power at a true contrast of zero.
+
+```{r sensitivity}
+sens <- seq_budget_sensitivity(
+  true_means       = true_means,
+  true_sds         = true_sds,
+  contrast_weights = weights,
+  cost_per_group   = costs,
+  budget           = budget,
+  margin           = 1.25,
+  G                = 400,
+  seed             = 113,
+  m_0              = 10
+)
+print(sens, digits = 4)
+```
+
+No replication went over the budget (`pct_within_budget` is
+`r term(sens, "pct_within_budget")`), which holds by construction. The
+mean final sizes are close to the optimal ones. Three rows describe the
+variance of the estimator and are to be read against
+`optimal_variance`, the smallest the budget allows
+(`r fixed(term(sens, "optimal_variance"), 3)`): the mean of the estimated
+variance at stopping (`r fixed(term(sens, "mean_estimated_variance"), 3)`),
+the mean true variance at the final sample sizes
+(`r fixed(term(sens, "mean_true_variance"), 3)`, which no allocation
+within the budget can push below the optimum), and the variance actually
+observed over the replications
+(`r fixed(term(sens, "empirical_variance"), 3)`, the noisiest of the
+three). The interval covered the true contrast in
+`r fixed(100 * term(sens, "coverage"), 1)` percent of the
+`r term(sens, "replications")` replications (Monte Carlo standard error
+`r fixed(100 * sqrt(term(sens, "coverage") * (1 - term(sens, "coverage")) / term(sens, "replications")), 1)`
+percentage points), and with a margin of 1.25 this budget rejects
+inferiority in about
+`r fixed(100 * term(sens, "noninferiority_rejection_rate"), 1)` percent
+of studies when the formats are in fact equally effective (Monte Carlo
+standard error
+`r fixed(100 * sqrt(term(sens, "noninferiority_rejection_rate") * (1 - term(sens, "noninferiority_rejection_rate")) / term(sens, "replications")), 1)`
+percentage points), which agrees with the
+`r fixed(100 * pnorm(reach / se_best), 0)` percent that the normal
+approximation gave in the section on hypothesis decisions.
+
+Two cautions. First, the interval and the tests are asymptotic. The
+estimated variance tends to run slightly below the true one (sample
+standard deviations underestimate population ones on average, and the
+allocation follows them). The Details of `?seq_budget_sensitivity`
+report runs of 10,000 replications of five designs with a pilot of 10
+and about 15 to 120 observations per group: coverage of the 95 percent
+interval was 0.936 to 0.949 for normal populations and 0.925 to 0.941
+for skewed ones, and the noninferiority test, with the true contrast
+exactly at the margin and a nominal level of 0.05, rejected in 0.050 to
+0.061 of studies for normal populations and in 0.040 to 0.085 for skewed
+ones. A smaller pilot makes the shortfall larger, and the minimum pilot
+of two makes it much larger; the help page of `seq_budget_pilot()` gives
+measured figures, and the `m_0` argument of `seq_budget_sensitivity()`
+shows the effect for a design of interest. Second, the procedure makes
+the most of a budget; it does not promise a given power. A study that
+needs more must raise the budget or accept a wider margin. (The values
+above are shown to four significant digits; the stored values are not
+rounded. A reported analysis deserves more replications than the
+`r term(sens, "replications")` used to keep this vignette quick.)
+
+## The Article's First Passage Rule
+
+In the article a population stops being sampled the first time it meets
+its criterion and is never sampled again, and the populations still open
+receive one observation each per stage, in decreasing order of their
+standard deviations (pp. 429 to 430). A check sees only the data in
+hand, so by default `seq_budget()` judges every group afresh at each
+check: a group that met its criterion earlier and has fallen below it
+again, because the other standard deviations moved, receives further
+observations, and the next observation always goes to the group furthest
+below its estimated optimal size. That default is this package's
+choice, not the article's procedure. For the article's first passage
+rule, hand each check the groups that the previous check closed and ask
+for the article's order:
+
+```{r first-passage}
+set.seed(113)
+scores_fp <- lapply(1:3, new_score, k = m_0)
+closed <- NULL
+repeat {
+  out_fp <- seq_budget(scores_fp, weights, cost_per_group = costs,
+                       budget = budget, closed = closed)
+  closed <- attr(out_fp, "met_per_group")
+  g <- seq_budget_next(out_fp, order = "rounds")
+  if (is.na(g)) break
+  scores_fp[[g]] <- c(scores_fp[[g]], new_score(g))
+}
+attr(out_fp, "n_per_group")
+attr(out_fp, "rule_met")
+attr(out_fp, "remaining_budget")
+```
+
+Under this rule every group can have met its criterion, each at its own
+time, with part of the budget still unspent. (The loop is the package's
+reading of the article's sequence rather than a step for step copy:
+`?seq_budget_next` lists three details that differ, the main one being
+that a check judges every open group each time, where the article
+judges a population only after an observation drawn from it.) The two
+readings can be
+compared for a design with the `procedure` argument of
+`seq_budget_sensitivity()`:
+
+```{r first-passage-sens}
+sens_fp <- seq_budget_sensitivity(
+  true_means, true_sds, weights, costs, budget,
+  margin = 1.25, G = 400, seed = 113, m_0 = 10,
+  procedure = "first_passage"
+)
+rows <- c("mean_total_cost", "pct_rule_met", "mean_n_1", "mean_n_2",
+          "mean_n_3", "mean_true_variance", "coverage")
+data.frame(
+  term = rows,
+  reallocate = round(sens$value[match(rows, sens$term)], 3),
+  first_passage = round(sens_fp$value[match(rows, sens_fp$term)], 3)
+)
+```
+
+Under the article's rule about
+`r fixed(term(sens_fp, "pct_rule_met"), 0)` percent of the studies ended
+with every group having met its criterion and money left over; under the
+default
+`r if (term(sens, "pct_rule_met") == 0) "none did" else paste(fixed(term(sens, "pct_rule_met"), 0), "percent did")`,
+and on average
+`r fixed(term(sens, "mean_total_cost") - term(sens_fp, "mean_total_cost"), 0)`
+more of the budget was spent. The two readings give intervals of
+practically the same quality. In the simulations reported in the Details
+of `?seq_budget` (three designs from Table 1 of the article, each with a
+budget of 5,000 and a pilot of 10, for normal and for skewed
+populations), the default left about 10 to 12 of the budget unspent where
+the first passage rule left 19 to 42, the true variance of the estimator
+at the final sample sizes was 0.2 to 1.0 percent smaller under the
+default, and coverage differed by at most 0.006, in either direction.
+The difference in coverage in the table above
+(`r fixed(term(sens, "coverage"), 3)` against
+`r fixed(term(sens_fp, "coverage"), 3)`) is within Monte Carlo error at
+`r term(sens, "replications")` replications, where each figure has a
+standard error of about
+`r fixed(sqrt(term(sens, "coverage") * (1 - term(sens, "coverage")) / term(sens, "replications")), 3)`.
+
+## References
+
+Chattopadhyay, B., Bandyopadhyay, T., Kelley, K., & Padalunkal, J. J.
+(2025). A sequential approach for noninferiority or equivalence of a
+linear contrast under cost constraints. *Psychological Methods, 30*(2),
+425--439. [doi:10.1037/met0000570](https://doi.org/10.1037/met0000570)
+
+Luh, W. M., & Guo, J. H. (2016). Sample size planning for the
+noninferiority or equivalence of a linear contrast with cost
+considerations. *Psychological Methods, 21*(1), 13--34.
+[doi:10.1037/met0000039](https://doi.org/10.1037/met0000039)
+
+Mukhopadhyay, N., & de Silva, B. M. (2009). *Sequential methods and their
+applications*. Chapman & Hall/CRC. ISBN:9780367386535

@@ -2,57 +2,174 @@
 % Please edit documentation in R/ts_fwd_dfr_mean.R
 \name{ts_fwd_dfr_mean}
 \alias{ts_fwd_dfr_mean}
-\title{ts_fwd_dfr_mean}
+\title{Two Stage Fixed Width Confidence Interval for a Distribution Free Mean}
 \usage{
 ts_fwd_dfr_mean(
-  data,
+  pilot_data,
+  additional_data = NULL,
   d,
-  alpha,
-  gamma,
-  pilot = FALSE,
-  verbose = FALSE,
+  conf_level = 0.95,
   na.rm = TRUE
 )
 }
 \arguments{
-\item{data}{The data for which to calculate the confidence interval.
-A numeric vector.}
+\item{pilot_data}{Numeric vector of the first stage observations, at
+least two. The whole first stage must be supplied at every call,
+because it alone determines the total sample size.}
 
-\item{d}{Half of the confidence interval width, must be a non-zero positive
-value.}
+\item{additional_data}{Numeric vector of the second stage observations
+collected so far, or \code{NULL} (the default) when none have been
+collected.}
 
-\item{alpha}{The significance level. A value between 0 and 1.}
+\item{d}{The half width of the confidence interval (the margin of
+error), in the units of the data. A single positive number. The full
+width is \eqn{2d}.}
 
-\item{gamma}{gamma}
+\item{conf_level}{The nominal confidence level, strictly between 0 and
+1. Default 0.95. The level is asymptotic; see Details for the size
+of the shortfall.}
 
-\item{pilot}{Should a pilot sample be generated. True/False value.
-default value is \code{FALSE}.}
-
-\item{verbose}{Should the criterion be printed. Default is \code{FALSE}.}
-
-\item{na.rm}{This parameter controls whether NA values are removed from
-the data prior to calculation. Default is \code{TRUE}.}
+\item{na.rm}{Logical. If \code{TRUE} (the default), missing values are
+removed from both stages before anything is computed; if
+\code{FALSE}, a missing value is an error.}
 }
 \value{
-The calculated confidence interval, the sample size, data mean,
-and an indicator of if the criterion was satisfied.
+An object of class \code{c("smsd_check", "data.frame")} (see
+  \code{\link{smsd_check_methods}} for its \code{print()},
+  \code{summary()}, and \code{tidy()} methods) with columns \code{term}
+  and \code{value} and five rows:
+  \describe{
+    \item{\code{lower_limit}}{\eqn{\bar{X} - d}, with \eqn{\bar{X}} the
+      mean of all observations supplied.}
+    \item{\code{mean}}{\eqn{\bar{X}}, the estimate of \eqn{\mu}.}
+    \item{\code{upper_limit}}{\eqn{\bar{X} + d}.}
+    \item{\code{optimal_n}}{The total sample size \eqn{N} fixed by the
+      first stage.}
+    \item{\code{current_n}}{The number of observations supplied, both
+      stages together.}
+  }
+  Attributes: \code{is_satisfied} (\code{TRUE} once \code{current_n} is at
+  least \code{optimal_n}), \code{current_n}, \code{criterion_n} (equal to
+  \code{optimal_n}), \code{conf_level}, \code{width} (the full width
+  \eqn{2d}), \code{method}, and \code{notes} (always empty for this
+  function). There is no \code{variance_unusable} attribute: a first stage
+  whose variance cannot be estimated is an error (see Details).
 }
 \description{
-Two Stage approach to Get Fixed Width
-Confidence Interval for the mean of distribution free random variables
+Evaluates the two stage procedure for a confidence interval of fixed
+width for a population mean \eqn{\mu} when no distribution is assumed
+(only a finite variance). The first stage (\code{pilot_data}) fixes the
+total sample size; the second stage (\code{additional_data}) completes
+it. The interval is \eqn{\bar{X}_N \pm d}, where \code{d} is the half
+width (the margin of error) and \eqn{\bar{X}_N} is the mean of all
+observations from both stages.
+}
+\details{
+With \eqn{m} first stage observations and their sample variance
+\eqn{S_m^2}, the total sample size is
+\deqn{N = \max\{m,\ \lceil z_{\alpha/2}^2 \, S_m^2 / d^2 \rceil\},}
+where \eqn{z_{\alpha/2}} is the upper \eqn{\alpha/2} point of the
+standard normal distribution and \eqn{\alpha = 1 - } \code{conf_level}.
+If \eqn{N = m} the first stage is enough; otherwise \eqn{N - m} further
+observations are collected, once. \eqn{N} depends on the first stage
+alone. The row \code{optimal_n} is this total \eqn{N}, not the number
+still to collect.
+
+\strong{The confidence level is asymptotic, and the shortfall can be
+large.} The rule plugs the first stage variance into the known variance
+sample size \eqn{C = z_{\alpha/2}^2 \sigma^2 / d^2} with no allowance
+for having estimated it. Once \eqn{C} is more than about 1.2 times the
+first stage, the realized coverage is therefore below the nominal level,
+and it approaches that level only as the first stage grows. (The figure
+1.2 is for normal data, a first stage of 30, and a nominal 0.95; it is
+between about 1.1 and 1.3 for first stages of 5 to 200 and nominal
+levels of 0.90 to 0.99. When the first stage is nearly as large as
+\eqn{C}, or larger, more observations are taken than the target calls
+for and coverage is at or above nominal.) For normal data
+and a narrow target the coverage is \eqn{P(|t_{m-1}| \le z_{\alpha/2})}:
+at a nominal 0.95, 0.918 for a first stage of 10, 0.940 for 30, and
+0.947 for 100. For skewed data it is lower. With the first stage that
+\code{\link{ts_fwd_dfr_mean_pilot}} returns by default (30
+observations unless the target is very narrow), the coverage at a
+nominal 0.95 for populations with standard deviation 2 is:
+\tabular{lrrrr}{
+  Half width \code{d} \tab 1 \tab 0.5 \tab 0.2 \tab 0.1 \cr
+  Known variance sample size \eqn{C} \tab 15.4 \tab 61.5 \tab 384
+    \tab 1537 \cr
+  Normal data \tab 0.994 \tab 0.942 \tab 0.941 \tab 0.940 \cr
+  Exponential data (skewness 2) \tab 0.996 \tab 0.919 \tab 0.915
+    \tab 0.917 \cr
+  Lognormal data (skewness 4) \tab 0.998 \tab 0.928 \tab 0.874
+    \tab 0.876
+}
+The normal row is exact; the other rows are from 20,000 simulated
+studies per cell (standard error at most 0.0023). At \code{d = 1} the
+first stage of 30 already exceeds the sample size needed, which is why
+coverage there is above nominal. Larger first stages help slowly: with
+100 first stage observations the narrow target coverages are 0.947
+(normal), 0.936 (exponential), and 0.918 (lognormal). A first stage of
+only two observations gives 0.78 for normal data at \code{d = 1}.
+
+If the data can be taken as normal, use \code{\link{ts_fwd_norm_mean}}
+instead: Stein's procedure replaces \eqn{z_{\alpha/2}} by a \emph{t}
+quantile and its coverage is exact for any first stage size. If they
+cannot, consider the purely sequential \code{\link{seq_fwd_dfr_mean}},
+which keeps updating the variance estimate as observations arrive (its
+level is asymptotic too). This two stage rule is for studies in which
+only one further round of data collection is possible; give it as large
+a first stage as the study allows.
+
+The interval rows are reported at every call so that progress can be
+followed, but the interval carries even its asymptotic confidence level
+only when the stopping rule is met, that is, when the current sample
+size has reached \code{optimal_n}.
+
+\strong{A first stage with no variation is an error.} If every first
+stage observation is equal, or equal up to rounding error (a range of no
+more than \eqn{10^{-10}} times the largest absolute value, the rule used
+throughout the package), the first stage variance cannot be estimated
+and the function stops with an error that says what to do. The purely
+sequential functions report such data as a stopping rule that is not yet
+met, with the attribute \code{variance_unusable}; here that would
+mislead, because the total sample size is fixed by the first stage
+alone, so no later observation could turn a rule reported as not met
+into one that is met. Data whose real variation is that small beside
+their size (times recorded in seconds since 1970 that differ by
+hundredths of a second, for example) should have a common value
+subtracted from both stages first; the total sample size does not depend
+on it.
 }
 \examples{
-pilot_ss <- ts_fwd_dfr_mean (alpha=0.1, d=0.2, gamma=0.5, pilot=TRUE)
-\dontrun{
-SLS <- rnorm(pilot_ss, mean=0, sd=1)
-}
-SLS <- rnorm(100, mean=0, sd=1)
-ts_fwd_dfr_mean (data=SLS, d=0.2, alpha=0.1, gamma=0.5, pilot=FALSE)
+# An HR analyst wants mean weekly hours of unpaid overtime to within
+# half an hour, with a nominal 95\% confidence level; the hours are
+# right skewed, so normality is not assumed.
+set.seed(113)
+m <- ts_fwd_dfr_mean_pilot(d = 0.5, conf_level = 0.95)
+first_stage <- rgamma(m, shape = 2, rate = 0.5)
+check <- ts_fwd_dfr_mean(first_stage, d = 0.5)
+check
+
+# The first stage fixed the total sample size; collect the remainder.
+n_more <- attr(check, "criterion_n") - attr(check, "current_n")
+second_stage <- rgamma(n_more, shape = 2, rate = 0.5)
+ts_fwd_dfr_mean(first_stage, second_stage, d = 0.5)
+
 }
 \references{
-Mukhopadhyay, N., \& de Silva, Basil M. (2009). \emph{Sequential Methods and Their Applications}. New York: CRC Press.
+Mukhopadhyay, N., & de Silva, B. M. (2009). \emph{Sequential methods and
+their applications}. Chapman & Hall/CRC. ISBN:9780367386535
+}
+\seealso{
+\code{\link{ts_fwd_dfr_mean_pilot}} for the first stage size;
+  \code{\link{ts_fwd_norm_mean}} for the exact procedure under
+  normality; \code{\link{seq_fwd_dfr_mean}} for the purely sequential
+  procedure.
+
+Other ts_fwd_dfr_mean:
+\code{\link[=ts_fwd_dfr_mean_pilot]{ts_fwd_dfr_mean_pilot()}}
 }
 \author{
-Bhargab Chattopadhyay \email{Bhargab@iiitvadodara.ac.in},
-Neetu Shah \email{201451015@iiitvadodara.ac.in}, Ken Kelley \email{kkelley@nd.edu}
+Ken Kelley \email{kkelley@nd.edu},
+  Bhargab Chattopadhyay \email{bhargab@iiitvadodara.ac.in}
 }
+\concept{ts_fwd_dfr_mean}

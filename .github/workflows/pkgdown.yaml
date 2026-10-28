@@ -1,0 +1,85 @@
+# Builds the pkgdown site and publishes it to the gh-pages branch, which
+# GitHub Pages serves at the address named in _pkgdown.yml.
+# Derived from https://github.com/r-lib/actions/tree/v2/examples
+#
+# Before any push, the first one included, sweep the history that is about
+# to become public: `Rscript tools/release_checks.R --history`. The full
+# release gate repeats the sweep before a tarball leaves, but it cannot pass
+# until the site address is in DESCRIPTION, and the site exists only after a
+# push, so the first push has to be swept on its own.
+#
+# One manual step is needed the first time: after this workflow has run and
+# created the gh-pages branch, set Settings -> Pages -> Source to "Deploy
+# from a branch", branch "gh-pages", folder "/ (root)". Once the site
+# answers, add its address to the URL field of DESCRIPTION.
+#
+# pkgdown renders every Markdown file at the top level of the repository into
+# the site. Only the package's own documents belong there, so the build is
+# refused when the checkout holds any other, and the built site is searched
+# before anything is published.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+name: pkgdown.yaml
+
+permissions: read-all
+
+jobs:
+  pkgdown:
+    runs-on: ubuntu-latest
+    # Only restrict concurrency for non-PR jobs
+    concurrency:
+      group: pkgdown-${{ github.event_name != 'pull_request' || github.run_id }}
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse to render anything but the package's own documents
+        run: |
+          extra=$(ls *.md *.Rmd *.qmd .github/*.md 2>/dev/null | grep -v -x -E 'README\.md|README\.Rmd|NEWS\.md|LICENSE\.md|cran-comments\.md' || true)
+          if [ -n "$extra" ]; then
+            echo "Markdown files that are not package documents:"
+            echo "$extra"
+            exit 1
+          fi
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::pkgdown, local::.
+          needs: website
+
+      - name: Build site
+        run: pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)
+        shell: Rscript {0}
+
+      - name: Refuse to publish a page that came from anything else
+        run: |
+          extra=$(cd docs && ls *.html | grep -v -x -E 'index\.html|404\.html|authors\.html|LICENSE\.html|LICENSE-text\.html' || true)
+          if [ -n "$extra" ]; then
+            echo "Unexpected top-level pages in the built site:"
+            echo "$extra"
+            exit 1
+          fi
+
+      - name: Deploy to GitHub pages
+        if: github.event_name != 'pull_request'
+        uses: JamesIves/github-pages-deploy-action@v4.5.0
+        with:
+          clean: false
+          branch: gh-pages
+          folder: docs

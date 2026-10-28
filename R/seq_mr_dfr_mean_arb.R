@@ -1,108 +1,248 @@
-#' seq_mr_dfr_mean_arb
+#' Pilot Sample Size for Minimum Risk Point Estimation of a Mean,
+#' Distribution Free
 #'
-#'Purely Sequential approach to Get Minimum Risk Point Estimation for the mean of distribution free random variables with arbitrary variance.
+#' Returns the number of observations to collect before the stopping rule of
+#' \code{\link{seq_mr_dfr_mean_arb}} is checked for the first time. That
+#' procedure is the purely sequential minimum risk point estimation (MRPE)
+#' procedure for the mean of a population whose distribution is not
+#' specified and whose variance is unknown and unrestricted (Mukhopadhyay
+#' and de Silva, 2009).
 #'
+#' @details
+#' The pilot is
+#' \deqn{m = \max\{m_0,\ \lceil (A/c)^{1/(2 + 2\gamma)} \rceil\},}
+#' the pilot sample size of Chattopadhyay and Kelley (2016, Equation 24),
+#' who give it for a stopping rule with a correction term of the same kind
+#' and present it as following Mukhopadhyay and de Silva (2009). The stopping
+#' rule of \code{seq_mr_dfr_mean_arb()},
+#' \eqn{n \ge (A/c)^{1/2}(S_n + n^{-\gamma})}, can never be met with fewer
+#' than \eqn{(A/c)^{1/(2 + 2\gamma)}} observations, whatever the data, so
+#' nothing is lost by collecting that many at the outset. Use the same
+#' \code{gamma} here and in \code{seq_mr_dfr_mean_arb()}. The default
+#' values of \code{m_0} and \code{gamma} are the package's.
 #'
-#' @param data The data for which to calculate the confidence interval.
-#' A numeric vector.
-#' @param A The loss function constant.
-#' @param c The cost of unit sample.
-#' @param gamma gamma
-#' @param pilot Should a pilot sample be generated. True/False value.
-#' default value is \code{FALSE}.
-#' @param verbose Should the criterion be printed. Default is \code{FALSE}.
-#' @param na.rm This parameter controls whether NA values are removed from
-#' the data prior to calculation. Default is \code{TRUE}.
+#' @param A The loss constant: the price of one unit of squared estimation
+#'   error, in the same currency as \code{c}, so that the loss is
+#'   \eqn{A(\bar{X}_n - \mu)^2 + c\,n}. A positive number.
+#' @param c The cost of sampling one observation. A positive number.
+#' @param m_0 The smallest pilot sample size allowed. A whole number of at
+#'   least 2; default 4.
+#' @param gamma The positive constant of the correction term
+#'   \eqn{n^{-\gamma}} in the stopping rule; default 1. Use the value passed
+#'   to \code{\link{seq_mr_dfr_mean_arb}}.
 #'
-#' @return The calculated risk, the sample size, mean, standard deviation,
-#'  and
-#' an indicator of if the criterion was satisfied.
-#'
-#' @author Bhargab Chattopadhyay \email{Bhargab@iiitvadodara.ac.in},
-#' Neetu Shah \email{201451015@iiitvadodara.ac.in}, Ken Kelley \email{kkelley@nd.edu}
-#'
+#' @return A length one integer giving the pilot sample size.
 #'
 #' @references
-#' Mukhopadhyay, N., \& de Silva, Basil M. (2009). \emph{Sequential Methods and Their Applications}. New York: CRC Press.
+#' Chattopadhyay, B., & Kelley, K. (2016). Estimation of the coefficient
+#' of variation with minimum risk: A sequential method for minimizing
+#' sampling error and study cost. \emph{Multivariate Behavioral Research},
+#' \emph{51}(5), 627--648. \doi{10.1080/00273171.2016.1203279}
 #'
+#' Mukhopadhyay, N., & de Silva, B. M. (2009). \emph{Sequential methods and
+#' their applications}. Chapman & Hall/CRC. ISBN:9780367386535
 #'
-#' @export seq_mr_dfr_mean_arb
+#' @author Bhargab Chattopadhyay \email{bhargab@@iiitvadodara.ac.in},
+#'   Ken Kelley \email{kkelley@@nd.edu}
 #'
 #' @examples
-#' pilot_ss <- seq_mr_dfr_mean_arb(A=100, c=2, pilot=TRUE)
-#' SLS <- rnorm(pilot_ss, mean=0, sd=1)
-#' seq_mr_dfr_mean_arb(data=SLS, A=100, c=2, gamma=0.5, pilot=FALSE)
-seq_mr_dfr_mean_arb <- function(data, A, c, gamma,
-                                pilot=FALSE, verbose=FALSE,
-                                na.rm=TRUE){
+#' # An error of one dollar (squared) in mean order value is worth 400
+#' # dollars to a retailer; auditing one more order costs 0.25 dollars.
+#' seq_mr_dfr_mean_arb_pilot(A = 400, c = 0.25)
+#'
+#' @seealso \code{\link{seq_mr_dfr_mean_arb}}
+#' @family seq_mr_dfr_mean_arb
+#' @export
+seq_mr_dfr_mean_arb_pilot <- function(A, c, m_0 = 4, gamma = 1) {
+  .seq_need(missing(A), "A", "the loss constant")
+  .seq_need(missing(c), "c", "the cost of sampling one observation")
+  A <- .check_positive(A, "A")
+  .mr_check_cost(c)
+  .seq_pilot(sqrt(A / c), m_0, gamma,
+             advice = "Check 'A' and the cost 'c'.")
+}
 
-  if(!missing(A)){
-    if(A<=0) stop("A should be a non-zero positive value")
+
+#' Minimum Risk Point Estimation of a Mean, Distribution Free
+#'
+#' Given the data collected so far, checks the stopping rule of the purely
+#' sequential minimum risk point estimation (MRPE) procedure for a
+#' population mean when the distribution is not specified and the variance
+#' is unknown and unrestricted (Mukhopadhyay and de Silva, 2009).
+#' Estimation error and sampling both cost something; the procedure looks
+#' for the sample size at which their expected total, the risk, is smallest.
+#' That sample size depends on the unknown variance, so observations are
+#' collected until the sample size reaches the size the current estimate
+#' calls for. The procedure is risk based, so there is no confidence level.
+#'
+#' The function does not collect data and keeps no state. Call it after each
+#' new observation (or batch), starting once
+#' \code{\link{seq_mr_dfr_mean_arb_pilot}} observations are in hand, and
+#' stop sampling the first time \code{attr(out, "is_satisfied")} is
+#' \code{TRUE}.
+#'
+#' @details
+#' The loss from estimating the mean \eqn{\mu} by the sample mean of
+#' \eqn{n} observations is \eqn{A(\bar{X}_n - \mu)^2 + c\,n}: \eqn{A} prices
+#' a unit of squared estimation error and \eqn{c} is the cost of one
+#' observation. Its expectation for a fixed \eqn{n}, the risk, is
+#' \eqn{A\sigma^2/n + c\,n} for any distribution with variance
+#' \eqn{\sigma^2}; it is smallest at \eqn{n^* = (A/c)^{1/2}\sigma}, where
+#' it equals \eqn{2 c\,n^*}. Sampling stops at the first \eqn{n} (at or
+#' beyond the pilot size) with
+#' \deqn{n \ge (A/c)^{1/2}\,(S_n + n^{-\gamma}),}
+#' where \eqn{S_n} is the sample standard deviation. The correction term
+#' \eqn{n^{-\gamma}} keeps the rule from being met on a standard deviation
+#' estimate that happens to be very small early on; it vanishes as the
+#' sample grows. The \code{optimal_n} row is the right hand side rounded
+#' up, and the \code{risk} row is the estimated risk at the current sample
+#' size, \eqn{A S_n^2/n + c\,n}; both are evaluated at the current data.
+#'
+#' \strong{The choice of \code{gamma}, and the units of the data.} The
+#' correction term is added to a standard deviation, so it is in the units
+#' of the data, and the procedure depends on the units in which the data
+#' are recorded. It inflates the final sample size \eqn{n} by a factor of
+#' roughly \eqn{1 + n^{-\gamma}/\sigma}: negligible when the standard
+#' deviation is 1 or more in the units of the data, and not negligible when
+#' it is much smaller unless \code{gamma} is large. A smaller \code{gamma}
+#' gives more protection against stopping too early at the price of more
+#' observations. Chattopadhyay and Kelley (2016, p. 636) use 0.49 for a
+#' correction of the same kind in their rule for the coefficient of
+#' variation, and note that a value above 1/2 falls outside part of their
+#' theory. The default here is 1 because it behaved well across scales in
+#' simulation, where 0.49 oversampled at small scales (see below).
+#'
+#' \strong{The optimality is asymptotic.} As the cost per observation falls
+#' (so that \eqn{n^*} grows), the expected final sample size approaches
+#' \eqn{n^*} and the risk approaches the minimum \eqn{2 c\,n^*}. In
+#' simulation (exponential data, \code{A = 100}, \code{c = 0.01}, so that
+#' \eqn{n^*} is 100 times the standard deviation, the pilot of
+#' \code{seq_mr_dfr_mean_arb_pilot()} with matching \code{gamma}, 40,000
+#' replications, Monte Carlo standard errors at most 0.004),
+#' with \code{gamma = 1} the expected final sample size was 1.10, 0.99, and
+#' 0.99 times \eqn{n^*} at standard deviations of 0.25, 1, and 3, and the
+#' risk was 1.02, 1.02, and 1.01 times the minimum. With
+#' \code{gamma = 0.49} the sample size ratios were 1.64, 1.08, and 1.01 and
+#' the risk ratios 1.13, 1.01, and 1.01.
+#'
+#' \strong{Constant data.} If every observation is equal, or equal up to
+#' rounding error (a range of no more than \eqn{10^{-10}} times the largest
+#' absolute value, as with gain scores of 0.3 computed as posttest minus
+#' pretest), the sample variance is zero, or nothing but rounding error, and
+#' under the rule as printed the correction term alone would eventually stop
+#' the sampling. The function departs from the printed rule deliberately: no
+#' variance has been estimated, so the rule is reported as not met,
+#' \code{risk} and \code{optimal_n} are \code{NA},
+#' \code{attr(out, "variance_unusable")} is \code{TRUE}, and a note says so
+#' (see \code{\link{smsd_check_methods}}); data whose real spread is that
+#' small beside their size should have a common value subtracted first.
+#'
+#' \strong{Extreme units.} Data that do vary, but whose spread is so large
+#' or so small that the sample variance cannot be represented in double
+#' precision (differences among the observations beyond about
+#' \eqn{10^{154}} or below about \eqn{10^{-162}}), are an error that says
+#' to change the units. That case is not reported as a rule not yet met,
+#' because collecting more data cannot help.
+#'
+#' @param x Numeric vector of the observations collected so far (at
+#'   least 2).
+#' @param A The loss constant: the price of one unit of squared estimation
+#'   error, in the same currency as \code{c}. A positive number.
+#' @param c The cost of sampling one observation. A positive number.
+#' @param gamma The positive constant of the correction term
+#'   \eqn{n^{-\gamma}} in the stopping rule; default 1. See Details for the
+#'   tradeoff. Use the same value in
+#'   \code{\link{seq_mr_dfr_mean_arb_pilot}}.
+#' @param na.rm Logical; should \code{NA} values be removed first? Default
+#'   \code{TRUE}. With \code{FALSE}, missing values are an error.
+#'
+#' @return An object of class \code{c("smsd_check", "data.frame")} with
+#'   columns \code{term} and \code{value} and these rows:
+#'   \describe{
+#'     \item{\code{mean}}{The sample mean, the point estimate.}
+#'     \item{\code{risk}}{The estimated risk at the current sample size,
+#'       \eqn{A S_n^2/n + c\,n}.}
+#'     \item{\code{optimal_n}}{The sample size the current data call for,
+#'       \eqn{\lceil (A/c)^{1/2}(S_n + n^{-\gamma}) \rceil}.}
+#'     \item{\code{current_n}}{The number of observations used.}
+#'   }
+#'   \code{risk} and \code{optimal_n} are \code{NA} when the data are
+#'   constant. Attributes: \code{is_satisfied} (\code{TRUE} when
+#'   \code{current_n} has reached \code{optimal_n}), \code{current_n},
+#'   \code{criterion_n} (equal to \code{optimal_n}), \code{method},
+#'   \code{loss_A}, \code{cost_c}, \code{gamma}, \code{variance_unusable}
+#'   (\code{TRUE} when the data are constant, so that no variance has been
+#'   estimated), and \code{notes}. \code{conf_level} and \code{width} are
+#'   \code{NULL}.
+#'
+#' @references
+#' Chattopadhyay, B., & Kelley, K. (2016). Estimation of the coefficient
+#' of variation with minimum risk: A sequential method for minimizing
+#' sampling error and study cost. \emph{Multivariate Behavioral Research},
+#' \emph{51}(5), 627--648. \doi{10.1080/00273171.2016.1203279}
+#'
+#' Mukhopadhyay, N., & de Silva, B. M. (2009). \emph{Sequential methods and
+#' their applications}. Chapman & Hall/CRC. ISBN:9780367386535
+#'
+#' @author Bhargab Chattopadhyay \email{bhargab@@iiitvadodara.ac.in},
+#'   Ken Kelley \email{kkelley@@nd.edu}
+#'
+#' @examples
+#' # Mean order value for an online retailer, in dollars. An error of one
+#' # dollar (squared) is worth 400 dollars and auditing one more order
+#' # costs 0.25 dollars. Order values are right skewed; they are simulated
+#' # here with a standard deviation of 10, so the best sample size is 400
+#' # (the square root of 400 / 0.25, times 10).
+#' set.seed(113)
+#' m <- seq_mr_dfr_mean_arb_pilot(A = 400, c = 0.25)
+#' orders <- rgamma(m, shape = 4, scale = 5)
+#' out <- seq_mr_dfr_mean_arb(orders, A = 400, c = 0.25)
+#' out
+#'
+#' # Add one order at a time until the stopping rule is met.
+#' while (!attr(out, "is_satisfied")) {
+#'   orders <- c(orders, rgamma(1, shape = 4, scale = 5))
+#'   out <- seq_mr_dfr_mean_arb(orders, A = 400, c = 0.25)
+#' }
+#' out
+#'
+#' @seealso \code{\link{seq_mr_dfr_mean_arb_pilot}};
+#'   \code{\link{seq_mr_norm_mean}} for the normal theory rule without the
+#'   correction term; \code{\link{seq_mr_cv}} and \code{\link{seq_mr_smd}}
+#'   for minimum risk estimation of effect sizes.
+#' @family seq_mr_dfr_mean_arb
+#' @export
+seq_mr_dfr_mean_arb <- function(x, A, c, gamma = 1, na.rm = TRUE) {
+  .seq_need(missing(A), "A", "the loss constant")
+  .seq_need(missing(c), "c", "the cost of sampling one observation")
+  A <- .check_positive(A, "A")
+  .mr_check_cost(c)
+  gamma <- .check_positive(gamma, "gamma")
+  x <- .mr_check_data(x, na.rm, arg = "x")
+  n <- length(x)
+  s2 <- stats::var(x)
+  unusable <- .seq_zero_spread(s2, x)
+
+  if (unusable) {
+    optimal_n <- NA_real_
+    risk <- NA_real_
+  } else {
+    optimal_n <- .seq_criterion(
+      sqrt(A / c) * (sqrt(s2) + n^(-gamma)),
+      advice = "Check 'A', the cost 'c', and the units of 'x'.")
+    risk <- .seq_finite_risk(A * s2 / n + c * n, A = A, c = c)
   }
 
-  if(missing(A)){
-    stop("You must specify \'A\'")
-  }
-
-  if(!missing(c)){
-    if(c<=0) {
-      stop("c should be a non-zero positive value")
-    }
-  }
-
-  if(missing(c)){
-    stop("You must specify \'c\'")
-  }
-
-  if(pilot==FALSE){
-    if(!missing(gamma)){
-      if(gamma<=0){
-        stop("gamma should be a non-zero positive value")
-      }
-    }
-
-    if(missing(gamma)){
-      stop("You must specify \'gamma\'")
-    }
-
-    if (!is.data.frame(data) && !is.matrix(data) && !is.vector(data)){
-      stop("The argument 'data' must be a data.frame or
-           matrix with one column")
-    }
-
-    if (dim(data)[2] != 1 && !is.null(data) && !is.vector(data)){
-      stop("The argument 'data' must have only one column,
-           or be 'NULL' for pilot = TRUE")
-    }
-
-
-    if(is.data.frame(data)){
-      data <- as.vector(data)
-    }
-    if(na.rm){
-      data <-  data[!is.na( data)]
-    }
-
-    n <- length(data)
-
-    optimal_N <- as.integer(sqrt((A/c))*(sqrt(stats::var(data))+n^(-gamma)))
-
-    Rk<-(1/n)*A*stats::var(data)+(c*n)
-
-    if(verbose==FALSE){
-      Outcome <- list(Risk=Rk, N=n, mean=mean(data),
-                            "Is.Satisfied?"=(n >= optimal_N))
-    }
-    if(verbose==TRUE){
-      Outcome <- list(Risk=Rk, N=n, mean=mean(data),
-                            Criterion=optimal_N,
-                            "Is.Satisfied?"= (n >= optimal_N))
-    }
-  }
-
-  if(pilot==TRUE){
-    Outcome <- c(Pilot.SS=max(4, ceiling((A/c)^(1/2))))
-  }
-
-  return(Outcome)
+  .seq_check(
+    term = c("mean", "risk", "optimal_n", "current_n"),
+    value = c(mean(x), risk, optimal_n, n),
+    method = paste0("minimum risk point estimation ",
+                    "(distribution free mean, arbitrary variance)"),
+    is_satisfied = !unusable && n >= optimal_n,
+    current_n = n,
+    criterion_n = optimal_n,
+    extra = list(loss_A = A, cost_c = c, gamma = gamma,
+                 variance_unusable = unusable),
+    notes = if (unusable) .seq_notes_unusable(x)
+  )
 }

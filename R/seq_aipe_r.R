@@ -1,0 +1,365 @@
+#' Pilot Sample Size for Sequential AIPE: Correlation Coefficient
+#'
+#' Returns the number of paired observations to collect before the
+#' sequential accuracy in parameter estimation (AIPE) stopping rule for a
+#' population correlation coefficient can be evaluated for the first time
+#' with \code{\link{seq_aipe_r}}. The same pilot size applies to the Pearson,
+#' Kendall, and Spearman coefficients, because it depends only on the target
+#' width and the confidence level.
+#'
+#' The pilot size is
+#' \deqn{m = \max\{m_0, \lceil 2 z_{\alpha/2} / \omega \rceil\},}
+#' where \eqn{\omega} is \code{width}, \eqn{z_{\alpha/2}} is the upper
+#' \eqn{\alpha/2} quantile of the standard normal distribution with
+#' \eqn{\alpha} equal to one minus \code{conf_level}, and \eqn{m_0} is
+#' \code{m_0} (Kelley, Darku, and Chattopadhyay, 2019, Equation 9, where
+#' \eqn{m_0 = 4}). The article's worked example, a 95\% interval of width
+#' 0.10, has a pilot of 40 pairs. Whatever the data, the stopping rule cannot
+#' be met with fewer than \eqn{\lceil 2 z_{\alpha/2} / \omega \rceil} pairs,
+#' which is why the pilot is at least that large.
+#'
+#' @param width The target full width of the confidence interval for the
+#'   population correlation (\eqn{\omega} in the cited article): the upper
+#'   limit minus the lower limit. A single positive number less than 2, the
+#'   length of the range of a correlation.
+#' @param conf_level The confidence level of the interval, a single number
+#'   strictly between 0 and 1. Default 0.95.
+#' @param m_0 The smallest pilot size allowed, a whole number of at least 4
+#'   (the variance estimator needs four pairs). Default 4. Raising it makes
+#'   an unusable early variance estimate less likely; see
+#'   \code{\link{seq_aipe_r}}.
+#'
+#' @return A single integer: the pilot number of pairs.
+#'
+#' @author
+#' Ken Kelley \email{kkelley@@nd.edu},
+#' Francis Bilson Darku \email{fbilsond@@nd.edu},
+#' Bhargab Chattopadhyay \email{bhargab@@iiitvadodara.ac.in}
+#'
+#' @references
+#' Kelley, K., Darku, F. B., & Chattopadhyay, B. (2019). Sequential
+#' accuracy in parameter estimation for population correlation
+#' coefficients. \emph{Psychological Methods}, \emph{24}(4), 492--515.
+#' \doi{10.1037/met0000203}
+#'
+#' @examples
+#' # The worked example of Kelley, Darku, and Chattopadhyay (2019): a 95%
+#' # interval no wider than 0.10
+#' seq_aipe_r_pilot(width = 0.10)
+#'
+#' # A wider target, with at least 30 pairs in the pilot
+#' seq_aipe_r_pilot(width = 0.40, m_0 = 30)
+#'
+#' @seealso \code{\link{seq_aipe_r}}
+#' @family seq_aipe_r
+#' @export
+seq_aipe_r_pilot <- function(width, conf_level = 0.95, m_0 = 4) {
+  .aipe_pilot(width, conf_level, m_0, range = 2)
+}
+
+
+#' Sequential AIPE Check for a Correlation Coefficient
+#'
+#' Checks, with the paired data collected so far, whether enough pairs are
+#' in hand for a confidence interval for a population correlation that is no
+#' wider than a chosen width, without assuming bivariate normality and
+#' without a planning value for the correlation. The Pearson product moment
+#' correlation, Kendall's tau, and Spearman's rho are available. This is the
+#' sequential accuracy in parameter estimation (AIPE) procedure of Kelley,
+#' Darku, and Chattopadhyay (2019).
+#'
+#' The function evaluates the stopping rule once and returns. The user
+#' collects the pilot sample (see \code{\link{seq_aipe_r_pilot}}), calls
+#' \code{seq_aipe_r()}, and, while the rule is not met, adds one or more
+#' pairs and calls it again. The function prints nothing and keeps no state.
+#'
+#' \strong{Stopping rule.} Sampling stops at the first \eqn{n}, at or after
+#' the pilot size, with
+#' \deqn{n \ge \left\lceil \frac{4 z_{\alpha/2}^2}{\omega^2}
+#'   \left(\hat{\xi}_n^2 + \frac{1}{n}\right) \right\rceil}
+#' (their Equation 10 for the Pearson correlation, Equation 30 for Kendall's
+#' tau, and Equation 54 for Spearman's rho), where \eqn{\hat{\xi}_n^2}
+#' estimates the asymptotic variance of \eqn{\sqrt{n}} times the sample
+#' correlation. The reported interval is
+#' \eqn{r_n \pm z_{\alpha/2} \hat{\xi}_n / \sqrt{n}} (their Equation 11).
+#' It is symmetric on the correlation scale: the article does not transform
+#' to Fisher's \emph{z}, and neither does the package, so a limit can fall
+#' outside \eqn{[-1, 1]} at small sample sizes. Whenever the rule is met,
+#' the width of the interval is at most \code{width}.
+#'
+#' \strong{Variance estimators.} For the Pearson correlation,
+#' \eqn{\hat{\xi}_n^2} is the moment based estimator of the article's
+#' Equation 70, a sample version of the distribution free variance in its
+#' Equation 3 (which equals \eqn{(1 - \rho^2)^2} under bivariate normality).
+#' Equation 70 is printed with divisions by the sample covariance; the
+#' factor \eqn{r_n^2} in front cancels them, and the estimate is computed
+#' with that cancellation carried out, so that it is defined when the sample
+#' covariance is exactly zero (which happens with discrete data such as
+#' ratings).
+#' For Kendall's tau it is the estimator of the article's Equations 27 to
+#' 29. For Spearman's rho it is the estimator of Kojadinovic and Yan (2010)
+#' given as the article's Equations 51 to 53. (The article states its
+#' Spearman stopping rule with the estimator of Genest and Favre, 2007, its
+#' Equation 45, and offers Equation 51 as a simpler consistent alternative;
+#' Equation 51 is what the package computes, and it reproduces the article's
+#' Table 10.)
+#'
+#' \strong{Tied values.} The Kendall and Spearman variance estimators assume
+#' continuous data. With tied values (ratings on a 5 point scale, for
+#' example) they are too small, so the rule stops too early and the interval
+#' is too narrow: with bivariate normal data (\eqn{\rho = 0.5}) cut into
+#' five categories, the estimates averaged 78\% (Kendall) and 85\%
+#' (Spearman) of the actual sampling variance at \eqn{n = 200}, and 95\%
+#' intervals at that fixed sample size covered 91\% and 92\% of the time
+#' (6,000 simulated samples). The function warns, once per call, when
+#' \code{method} is \code{"kendall"} or \code{"spearman"} and either
+#' variable has tied values. With ties the Kendall estimate reported is
+#' also a different coefficient from the one the variance estimator
+#' belongs to: it is tau-b, as \code{\link[stats]{cor}} computes it, whereas
+#' the article's estimator (its Equation 23) is the average over pairs of
+#' observations of the product of the signs of their differences (tau-a).
+#' The two are the same number when there are no ties and can differ
+#' materially when there are: 0.334 against 0.265 for 200 bivariate normal
+#' pairs with \eqn{\rho = 0.5}, both variables cut into five categories.
+#'
+#' \strong{A perfect sample correlation.} A sample correlation of 1 or
+#' \eqn{-1} (to within rounding error) says nothing about its own sampling
+#' variance. For the Pearson correlation the variance estimate is then
+#' zero, and so is the Kendall estimate for pairs ordered in opposite ways
+#' on the two variables; the Kendall estimate for pairs ordered the same
+#' way, and the Spearman estimate for pairs ordered either way, are
+#' positive, and with them the rule as printed would be met at once with a
+#' limit outside \eqn{[-1, 1]} (\eqn{-1.04} and \eqn{-0.96} for
+#' Spearman's rho with 12 pairs in exactly reversed order at
+#' \code{width = 0.4}). The function treats the three alike: the variance
+#' estimate of a perfect sample correlation is not yet usable (see the
+#' section below), so the rule is reported as not met until a pair breaks
+#' the perfect order.
+#'
+#' \strong{What the guarantee is.} The width guarantee is exact. The
+#' coverage guarantee is asymptotic: coverage approaches \code{conf_level}
+#' as \code{width} shrinks (their Theorem 1). At wide targets, and so small
+#' final sample sizes, coverage falls short, and the article says so: its
+#' Table 2 reports coverage of 0.90 for a 95\% interval of width 0.2 when
+#' \eqn{\rho = 0.5}, and its Appendix D attributes the shortfall to the bias
+#' of the ratios of moment estimates in the variance estimator at small
+#' \eqn{n}, which makes the procedure stop early. In simulated studies for
+#' this package (bivariate normal data, a 95\% Pearson interval, the default
+#' \code{m_0}, one pair added at each stage), coverage was 0.93 for
+#' \eqn{\rho = 0.4} and 0.69 for \eqn{\rho = 0.8} at \code{width = 0.2}
+#' (5,000 and 10,000 studies), and 0.78 and 0.69 at \code{width = 0.4}
+#' (10,000 studies each). A large correlation is the hard case: its interval
+#' is short, so the rule can be met with few pairs (about 43 on average for
+#' \eqn{\rho = 0.8} at \code{width = 0.2}), and in samples that small the
+#' variance estimate is often unusable (it was zero or negative in 42\% of
+#' the pilot samples in that condition, and in 14\% for \eqn{\rho = 0.4} at
+#' \code{width = 0.4}) and otherwise tends to run low. When it is positive
+#' but below \eqn{n^{-3}} the bound is used, as the article prescribes, and
+#' the rule is then met with an interval far narrower than requested: in
+#' other runs of 6,000 studies at \code{width = 0.4}, 58 with
+#' \eqn{\rho = 0.8} and 10 with \eqn{\rho = 0.4} ended that way, and in
+#' runs of 2,000 at \code{width = 0.2}, 10 and none. A larger minimum pilot
+#' helps: with \code{m_0 = 50} the coverages were 0.93 and 0.83 at
+#' \code{width = 0.2} and 0.92 and 0.83 at \code{width = 0.4}. For
+#' Kendall's tau and Spearman's rho with \eqn{\rho = 0.4}, coverage was
+#' 0.94 and 0.94 at \code{width = 0.2} and 0.91 and 0.87 at
+#' \code{width = 0.4}; their variance estimates were never zero or below the
+#' lower bound. A stronger association is the hard case for them too: with
+#' \eqn{\rho = 0.8} or \eqn{-0.8}, coverage was 0.91 to 0.92 for Kendall's
+#' tau and 0.87 to 0.88 for Spearman's rho at \code{width = 0.2}, and 0.89
+#' to 0.91 and 0.84 to 0.85 at \code{width = 0.4} (0.91 and 0.85 for
+#' \eqn{\rho = 0.8} in 10,000 studies). For a negative association the Kendall
+#' interval covers a little less often at a wide target than for a
+#' positive one of the same size: at \code{width = 0.4} coverage was 0.90
+#' for \eqn{\rho = -0.4}, and 0.89 for \eqn{\rho = -0.95} against 0.93 for
+#' \eqn{\rho = 0.95} (6,000 studies each); at \code{width = 0.2} it was
+#' 0.94 for \eqn{\rho = -0.4} and for \eqn{\rho = -0.95} (2,000 studies
+#' each). A strongly negative association can also make a small sample
+#' perfectly discordant (any two pairs ordered in opposite ways on the two
+#' variables). Kendall's tau is then \eqn{-1} and its variance estimate is
+#' zero, so the check is not yet usable until a concordant pair has been
+#' observed; this happened in 91 of the 6,000 pilot samples of 10 pairs
+#' with \eqn{\rho = -0.95}, in 5 with \eqn{\rho = -0.8}, and in none of
+#' the pilot samples of 20 pairs. Use
+#' \code{\link{seq_aipe_r_sensitivity}} to study a planned Pearson
+#' correlation study before collecting data, and prefer a narrow target or a
+#' larger \code{m_0} when the correlation may be large.
+#'
+#' @inheritSection seq_aipe_smd Estimates That Are Not Yet Usable
+#'
+#' @param x,y Numeric vectors: the two variables observed so far on the
+#'   same units, paired by position. They must have the same length, with at
+#'   least 4 pairs; missing or infinite values are an error.
+#' @param width The target full width of the confidence interval for the
+#'   population correlation (\eqn{\omega} in the cited article): the upper
+#'   limit minus the lower limit. A single positive number less than 2: a
+#'   correlation lies between -1 and 1, so an interval 2 or more wide would
+#'   say nothing, and such a target is an error.
+#' @param conf_level The confidence level of the interval, a single number
+#'   strictly between 0 and 1. Default 0.95.
+#' @param method Which correlation coefficient to estimate:
+#'   \code{"pearson"} (the default), \code{"kendall"}, or
+#'   \code{"spearman"}.
+#'
+#' @return An object of class \code{c("smsd_check", "data.frame")} (see
+#'   \code{\link{smsd_check_methods}} for its \code{print()},
+#'   \code{summary()}, and \code{tidy()} methods) with one row per quantity
+#'   and columns \code{term} and \code{value}. The rows are, in order:
+#'   \describe{
+#'     \item{\code{lower_limit}}{the lower confidence limit (\code{NA}
+#'       when the variance estimate is not yet usable or the estimate
+#'       cannot be computed; see the section below);}
+#'     \item{\code{r}}{the estimated correlation (Pearson's \emph{r},
+#'       Kendall's tau, or Spearman's rho, according to \code{method}, as
+#'       \code{\link[stats]{cor}} computes it, so that with ties Kendall's
+#'       tau is tau-b; \code{NA} when either variable has no variation);}
+#'     \item{\code{upper_limit}}{the upper confidence limit (\code{NA}
+#'       whenever \code{lower_limit} is);}
+#'     \item{\code{xi_squared}}{the estimated asymptotic variance
+#'       \eqn{\hat{\xi}_n^2}, at least \eqn{n^{-3}} (the bound itself
+#'       when the estimate is not yet usable);}
+#'     \item{\code{criterion_n}}{the number of pairs the stopping rule
+#'       currently requires (at least \code{current_n + 1} when the
+#'       variance estimate is not yet usable or the estimate cannot be
+#'       computed);}
+#'     \item{\code{current_n}}{the current number of pairs.}
+#'   }
+#'   The object also carries these attributes:
+#'   \describe{
+#'     \item{\code{is_satisfied}}{\code{TRUE} when the stopping rule is
+#'       met, otherwise \code{FALSE}; never \code{NA}, and always
+#'       identical to \code{current_n >= criterion_n};}
+#'     \item{\code{method}}{a string such as \code{"Pearson correlation"},
+#'       with the name of the coefficient that \code{method} selects;}
+#'     \item{\code{cor_method}}{the value of the argument \code{method};}
+#'     \item{\code{current_n}, \code{criterion_n}}{the values in the
+#'       rows of those names;}
+#'     \item{\code{conf_level}, \code{width}}{the values supplied;}
+#'     \item{\code{variance_unusable}}{\code{TRUE} when the raw variance
+#'       estimate is zero, negative, or not finite (see the section below),
+#'       otherwise \code{FALSE};}
+#'     \item{\code{notes}}{a character vector, empty unless something
+#'       needs explaining.}
+#'   }
+#'
+#' @author
+#' Ken Kelley \email{kkelley@@nd.edu},
+#' Francis Bilson Darku \email{fbilsond@@nd.edu},
+#' Bhargab Chattopadhyay \email{bhargab@@iiitvadodara.ac.in}
+#'
+#' @references
+#' Kelley, K., Darku, F. B., & Chattopadhyay, B. (2019). Sequential
+#' accuracy in parameter estimation for population correlation
+#' coefficients. \emph{Psychological Methods}, \emph{24}(4), 492--515.
+#' \doi{10.1037/met0000203}
+#'
+#' Kelley, K., Darku, F. B., & Chattopadhyay, B. (2018). Accuracy in
+#' parameter estimation for a general class of effect sizes: A sequential
+#' approach. \emph{Psychological Methods}, \emph{23}(2), 226--243.
+#' \doi{10.1037/met0000127}
+#'
+#' Genest, C., & Favre, A.-C. (2007). Everything you always wanted to know
+#' about copula modeling but were afraid to ask. \emph{Journal of Hydrologic
+#' Engineering}, \emph{12}, 347--368.
+#' \doi{10.1061/(ASCE)1084-0699(2007)12:4(347)}
+#'
+#' Kojadinovic, I., & Yan, J. (2010). Comparison of three semiparametric
+#' methods for estimating dependence parameters in copula models.
+#' \emph{Insurance: Mathematics and Economics}, \emph{47}, 52--63.
+#' \doi{10.1016/j.insmatheco.2010.03.008}
+#'
+#' Maxwell, S. E., Kelley, K., & Rausch, J. R. (2008). Sample size planning
+#' for statistical power and accuracy in parameter estimation. \emph{Annual
+#' Review of Psychology}, \emph{59}, 537--563.
+#' \doi{10.1146/annurev.psych.59.103006.093735}
+#'
+#' @examples
+#' # How strongly are citizenship behavior at work and neuroticism related?
+#' # The aim is a 95% confidence interval for the correlation that is no
+#' # wider than 0.30.
+#' set.seed(113)
+#' new_pairs <- function(k, rho = -0.3) {
+#'   citizenship <- rnorm(k)
+#'   cbind(citizenship, rho * citizenship + sqrt(1 - rho^2) * rnorm(k))
+#' }
+#' scores <- new_pairs(seq_aipe_r_pilot(width = 0.30))
+#' out <- seq_aipe_r(scores[, 1], scores[, 2], width = 0.30)
+#' out
+#'
+#' # The rule is not met at the pilot. Add one employee at a time and check
+#' # again, until it is.
+#' while (!attr(out, "is_satisfied")) {
+#'   scores <- rbind(scores, new_pairs(1))
+#'   out <- seq_aipe_r(scores[, 1], scores[, 2], width = 0.30)
+#' }
+#' out
+#'
+#' # Kendall's tau from the same data and target
+#' seq_aipe_r(scores[, 1], scores[, 2], width = 0.30, method = "kendall")
+#'
+#' @seealso \code{\link{seq_aipe_r_pilot}} for the pilot size and
+#'   \code{\link{seq_aipe_r_sensitivity}} to simulate the Pearson procedure
+#'   before collecting data. In \pkg{DMAR}: \code{\link[DMAR]{ss_aipe_r}},
+#'   the fixed sample size analog for when a planning value of the
+#'   correlation is available, and \code{\link[DMAR]{ci_r}}, a fixed sample
+#'   size confidence interval.
+#' @family seq_aipe_r
+#' @export
+seq_aipe_r <- function(x, y, width, conf_level = 0.95,
+                       method = c("pearson", "kendall", "spearman")) {
+  pair <- .aipe_check_pair(x, y, "x", "y")
+  width <- .aipe_check_width_bounded(width, range = 2)
+  conf_level <- .check_conf_level(conf_level)
+  method <- .check_choice(method, c("pearson", "kendall", "spearman"),
+                          "method")
+  # A correlation does not depend on the scale of either variable; each is
+  # divided by a power of two of its magnitude so that no sum of squares
+  # can overflow or underflow (ranks and ties are unaffected); see
+  # .aipe_scale().
+  x <- pair$x / .aipe_scale(pair$x)
+  y <- pair$y / .aipe_scale(pair$y)
+  n <- length(x)
+
+  # A variable with no variation has no correlation with anything; cor()
+  # would return NA with a warning (or, for values that are equal on paper
+  # but not in floating point, the correlation of rounding noise).
+  degenerate <- .is_constant(x) || .is_constant(y)
+  r <- if (degenerate) NA_real_ else stats::cor(x, y, method = method)
+  if (!degenerate && method != "pearson" &&
+      (anyDuplicated(x) > 0L || anyDuplicated(y) > 0L)) {
+    warning("The data contain tied values. The variance estimator for the ",
+            method, " correlation assumes continuous data and is too ",
+            "small when there are ties, so the stopping rule can be met ",
+            "too early and the interval can be too narrow.",
+            if (method == "kendall") {
+              paste0(" With ties the estimate is Kendall's tau-b, as ",
+                     "stats::cor() returns it, which is not the statistic ",
+                     "the variance estimator belongs to (see 'Tied values' ",
+                     "in the help of seq_aipe_r()).")
+            }, call. = FALSE)
+  }
+  raw <- .var_r(x, y, method = method, floor = FALSE)
+  # A sample correlation of 1 or -1 carries no information about its own
+  # sampling variance. The Pearson estimator is zero for such data, and so
+  # is the Kendall estimator for perfectly discordant pairs; but the Kendall
+  # estimator for perfectly concordant pairs and the Spearman estimator for
+  # perfectly monotone pairs are positive, and the rule as printed would be
+  # met at once with limits outside [-1, 1] (-1.04 and -0.96 for Spearman's
+  # rho with 12 perfectly decreasing pairs at a width of 0.4). The three
+  # methods are therefore treated alike: the variance estimate of a perfect
+  # sample correlation is not yet usable. cor() returns 1 for perfectly
+  # monotone ranks to within one unit in the last place; the smallest gap
+  # a rank correlation that is not perfect can have is 12 / n^3 (Spearman's
+  # rho, one adjacent swap), which stays above the tolerance below until n
+  # is about 80,000.
+  if (!degenerate && 1 - abs(r) <= 100 * .Machine$double.eps) {
+    raw <- 0
+  }
+
+  label <- c(pearson = "Pearson", kendall = "Kendall",
+             spearman = "Spearman")[[method]]
+  .aipe_result(estimate = r, raw = raw, n = n, width = width,
+               conf_level = conf_level, term = "r",
+               method = paste(label, "correlation"),
+               extra = list(cor_method = method))
+}

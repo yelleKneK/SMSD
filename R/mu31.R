@@ -1,31 +1,12 @@
-#' mu31
-#'
-#' This an internal function called by other functions.
-#'
-#' @param x The first vector
-#' @param y The second vector
-#' @param na.rm This parameter controls whether NA values are removed from
-#' the data prior to calculation. Default is \code{FALSE}.
-#'
-#' @return This function returns the calculated value for use in
-#' other functions.
-#'
-#' @author Ken Kelley \email{kkelley@nd.edu},
-#' Francis Bilson Darku \email{fbilsond@nd.edu},
-#' Bhargab Chattopadhyay \email{bhargab@iimv.ac.in}
-#'
-#' @examples
-#' x <- c(1:4)
-#' y <- c(2:5)
-#' mu31(x,y)
-#'
-#' @export mu31
-#'
-mu31 <- function(x, y,na.rm=FALSE)
-{
-  if(na.rm){
-    x <- x[!is.na(x)]
-    y <- y[!is.na(y)]
-  }
-  return(mu13(y, x))
+# Estimator of the joint central moment mu_31 = E[(X - mu_X)^3 (Y - mu_Y)],
+# the mirror image of .mu13(): mu31_hat = k31 + 3 k20 k11, Kelley, Darku,
+# and Chattopadhyay (2019, Equations 73 and 74). Internal; not exported.
+#
+# x, y: paired numeric vectors with at least 4 pairs.
+# na.rm: drop a pair when either member is missing? Default FALSE.
+#
+# Authors: Ken Kelley, Francis Bilson Darku, Bhargab Chattopadhyay.
+#' @noRd
+.mu31 <- function(x, y, na.rm = FALSE) {
+  .mu13(y, x, na.rm = na.rm)
 }

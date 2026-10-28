@@ -2,46 +2,156 @@
 % Please edit documentation in R/ts_br_exp_mean.R
 \name{ts_br_exp_mean}
 \alias{ts_br_exp_mean}
-\title{ts_br_exp_mean}
+\title{Two Stage Bounded Risk Point Estimation of an Exponential Mean}
 \usage{
-ts_br_exp_mean(data, A, w, pilot = FALSE, verbose = FALSE, na.rm = TRUE)
+ts_br_exp_mean(pilot_data, additional_data = NULL, A, w, na.rm = TRUE)
 }
 \arguments{
-\item{data}{The data for which to calculate the bounded risk point.}
+\item{pilot_data}{Numeric vector of the first stage observations, at
+least three, all positive. The whole first stage must be supplied at
+every call, because it alone determines the total sample size.}
 
-\item{A}{The loss function constant.}
+\item{additional_data}{Numeric vector of the second stage observations
+collected so far, all positive, or \code{NULL} (the default) when
+none have been collected.}
 
-\item{w}{The risk bound. A non-negative integer greater than zero.}
+\item{A}{The loss constant: the loss is \eqn{A\,(\bar{X} - \theta)^2}.
+A single positive number, in the units of \code{w} per squared unit
+of the data.}
 
-\item{pilot}{Should a pilot sample be generated. True/False value.
-default value is \code{FALSE}.}
+\item{w}{The risk bound: the largest acceptable expected loss. A single
+positive number.}
 
-\item{verbose}{Should the criterion be printed. Default is \code{FALSE}.}
-
-\item{na.rm}{This parameter controls whether NA values are removed from
-the data prior to calculation. Default is \code{TRUE}.}
+\item{na.rm}{Logical. If \code{TRUE} (the default), missing values are
+removed from both stages before anything is computed; if
+\code{FALSE}, a missing value is an error.}
 }
 \value{
-The current sample size, the mean and an indicator of if the
-criterion is satisfied.
+An object of class \code{c("smsd_check", "data.frame")} (see
+  \code{\link{smsd_check_methods}} for its \code{print()},
+  \code{summary()}, and \code{tidy()} methods) with columns \code{term}
+  and \code{value} and four rows:
+  \describe{
+    \item{\code{mean}}{The mean of all observations supplied, the
+      estimate of \eqn{\theta}.}
+    \item{\code{risk}}{\eqn{A \bar{X}^2 / n}: the risk
+      \eqn{A \theta^2 / n} of the mean of a fixed sample of the current
+      size, with \eqn{\theta} replaced by its estimate. A descriptive
+      estimate; the guarantee is the one stated in Details.}
+    \item{\code{optimal_n}}{The total sample size \eqn{N} fixed by the
+      first stage.}
+    \item{\code{current_n}}{The number of observations supplied, both
+      stages together.}
+  }
+  Attributes: \code{is_satisfied} (\code{TRUE} once \code{current_n} is at
+  least \code{optimal_n}), \code{current_n}, \code{criterion_n} (equal to
+  \code{optimal_n}), \code{loss_A}, \code{risk_bound}, \code{method}, and
+  \code{notes} (always empty for this function). There is no
+  \code{conf_level} or \code{width}, and no \code{variance_unusable}
+  attribute: the total sample size depends on the first stage mean, not on
+  a variance, so a first stage of equal observations is accepted.
 }
 \description{
-Two Stage approach to Get Bounded Risk Point
- Estimation for the mean of exponential random variables
+Evaluates the two stage bounded risk point estimation procedure for the
+mean \eqn{\theta} of an exponential distribution (a mean time to
+failure, a mean waiting time, a mean time between events). The loss in
+estimating \eqn{\theta} by the sample mean is
+\eqn{A\,(\bar{X} - \theta)^2}, and the goal is a sample size at which
+the expected loss, the risk, is at most \code{w} whatever the value of
+\eqn{\theta}. The first stage (\code{pilot_data}) fixes the total
+sample size; the second stage (\code{additional_data}) completes it.
+The estimate is the mean of all observations from both stages. The
+procedure is risk based, so there is no confidence level.
+}
+\details{
+The procedure is the two stage methodology that Mukhopadhyay and de
+Silva (2009, Section 8.3.1) attribute to Mukhopadhyay and Pepe (2006),
+with the improved constant that their Section 8.3.2 attributes to Zacks
+and Mukhopadhyay (2006). With \eqn{m \ge 3} first stage observations
+and their mean \eqn{\bar{X}_m}, the total sample size is (the book's
+Equation 8.3.9)
+\deqn{N = \max\{m,\ \lceil B \, \bar{X}_m^2 / w \rceil\}.}
+If \eqn{N = m} the first stage is enough; otherwise \eqn{N - m} further
+observations are collected, once, and \eqn{\theta} is estimated by the
+mean \eqn{\bar{X}_N} of all \eqn{N} observations. \eqn{N} depends on the
+first stage alone. The row \code{optimal_n} is this total \eqn{N}, not
+the number still to collect. The constant is (Equations 8.3.11 and
+8.3.13)
+\deqn{B = 0.565 \times \frac{2 m (m + 1) A}{(m - 1)(m - 2)}.}
+(The book writes the rounding as one more than the largest integer
+below \eqn{B \bar{X}_m^2 / w}, which is the ceiling.)
+
+\strong{What is guaranteed.} For the constant without the factor 0.565,
+Theorem 8.3.1 of Mukhopadhyay and de Silva (2009) states that the risk
+is at most \code{w} for every \eqn{\theta}, every \eqn{m \ge 3}, and
+every \code{A}; but that procedure uses about twice the sample size
+\eqn{n^* = A \theta^2 / w} at which a fixed sample has risk \code{w}.
+The factor 0.565 (Equation 8.3.13) is the improvement of Zacks and
+Mukhopadhyay (2006), found by exact computation of the risk; the book
+reports that it keeps the risk "only a shade under" the bound. That is
+a computed result, not a theorem, and it was recomputed for this
+package: the risk relative to \code{w} depends only on \eqn{m} and
+\eqn{n^*}, and exact calculation over first stage sizes from 3 to 100
+and values of \eqn{n^*} from 1 to 2,000 gives a largest value of 0.990
+(for a first stage of 14 or 15 observations with \eqn{n^*} near 44).
+The bound holds throughout that range, with little to spare by design.
+The guarantee rests on the exponential model.
+
+\strong{What it costs.} The expected total sample size exceeds \eqn{n^*}
+by a factor that depends on the first stage size: about
+\eqn{0.565 \times 2 (m + 1)^2 / ((m - 1)(m - 2))}, which is 9.04 for
+\eqn{m = 3}, 1.90 for \eqn{m = 10}, 1.46 for \eqn{m = 20}, and tends to
+1.13. See \code{\link{ts_br_exp_mean_pilot}} for the table and for the
+choice of first stage size, which the source leaves open.
+
+The data must be positive, as exponential observations are. Data on a
+scale so large or so small that the square of a mean cannot be
+represented in double precision (a mean beyond about \eqn{10^{154}} or
+below about \eqn{10^{-154}}) are an error that says to express them in
+other units; no row of the result is ever infinite.
 }
 \examples{
-pilot_ss <- ts_br_exp_mean(w=4, pilot=TRUE)
-SLS <- rexp(pilot_ss, rate=2)
-\dontrun{
-SLS <- rexp(pilot_ss, rate=2)
-}
-SLS <- rexp(100, rate=2)
-ts_br_exp_mean(SLS, A=100, w=4, pilot=FALSE)
+# An operations analyst wants the mean time between service calls
+# (hours) estimated under squared error loss with A = 100, keeping the
+# risk at or below 4.
+set.seed(113)
+m <- ts_br_exp_mean_pilot(A = 100, w = 4)
+first_stage <- rexp(m, rate = 1 / 2)
+check <- ts_br_exp_mean(first_stage, A = 100, w = 4)
+check
+
+# The first stage fixed the total sample size; collect the remainder.
+n_more <- attr(check, "criterion_n") - attr(check, "current_n")
+second_stage <- rexp(n_more, rate = 1 / 2)
+ts_br_exp_mean(first_stage, second_stage, A = 100, w = 4)
+
 }
 \references{
-Mukhopadhyay, N., \& de Silva, Basil M. (2009). \emph{Sequential Methods and Their Applications}. New York: CRC Press.
+Mukhopadhyay, N., & de Silva, B. M. (2009). \emph{Sequential methods and
+their applications}. Chapman & Hall/CRC. ISBN:9780367386535
+
+Mukhopadhyay, N., & Pepe, W. (2006). Exact bounded risk estimation when
+the terminal sample size and estimator are dependent: The exponential
+case. \emph{Sequential Analysis}, \emph{25}(1), 85--101.
+\doi{10.1080/07474940500452254} (As described in Mukhopadhyay and de
+Silva, 2009, Section 8.3.1, Equations 8.3.9 and 8.3.11.)
+
+Zacks, S., & Mukhopadhyay, N. (2006). Bounded risk estimation of the
+exponential parameter in a two-stage sampling. \emph{Sequential
+Analysis}, \emph{25}(4), 437--452. \doi{10.1080/07474940600934896} (As
+described in Mukhopadhyay and de Silva, 2009, Section 8.3.2, Equation
+8.3.13.)
+}
+\seealso{
+\code{\link{ts_br_exp_mean_pilot}} for the first stage size;
+  \code{\link{seq_mr_exp_mean}} for purely sequential minimum risk
+  estimation of an exponential mean.
+
+Other ts_br_exp_mean:
+\code{\link[=ts_br_exp_mean_pilot]{ts_br_exp_mean_pilot()}}
 }
 \author{
-Bhargab Chattopadhyay \email{Bhargab@iiitvadodara.ac.in},
-Neetu Shah \email{201451015@iiitvadodara.ac.in}, Ken Kelley \email{kkelley@nd.edu}
+Ken Kelley \email{kkelley@nd.edu},
+  Bhargab Chattopadhyay \email{bhargab@iiitvadodara.ac.in}
 }
+\concept{ts_br_exp_mean}

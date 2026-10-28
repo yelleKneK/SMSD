@@ -1,56 +1,44 @@
-#' mu4
-#'
-#' A function to compute the unbiased sample central fourth moment.
-#'
-#' The function \code{mu4} computes the unbiased sample central moment
-#' of a given vector. The input must numeric (as determined by
-#' \code{is.numeric}) and of length at least 4
-#' (excluding \code{NA}'s. If \code{na.rm} is \code{TRUE}, the \code{NA}
-#' entries in the given vector will be ignored.
-#'
-#' @param x A numeric vector of at least length 4.
-#' @param na.rm This parameter controls whether NA values are removed from
-#' the data prior to calculation. Default is \code{FALSE}.
-#'
-#' @return The calculated moment.
-#'
-#'
-#' @author Ken Kelley \email{kkelley@nd.edu},
-#' Francis Bilson Darku \email{fbilsond@nd.edu},
-#' Bhargab Chattopadhyay \email{bhargab@iimv.ac.in}
-#'
-#' @examples
-#' x <- c(1:5)
-#' mu4(x)
-#'
-#' @export mu4
-#'
-mu4 <- function(x, na.rm = FALSE) {
-  if (!is.numeric(x)){
-    stop("The argument 'x' needs to be numeric")
+# Unbiased estimator of the fourth central moment (the h-statistic of order
+# four). Kelley, Darku, and Chattopadhyay (2018, Equations 76 and 79; 2019,
+# Equations 71 and 72). Internal; not exported.
+#
+# x: numeric vector with at least 4 (non missing) values.
+# na.rm: remove missing values first? Default FALSE.
+#
+# The articles print the estimator in terms of raw power sums,
+#
+#   { n^2 sum((x - xbar)^4) - (2n - 3) sum(x^4) + (8n - 12) xbar sum(x^3)
+#     - (6 - 9/n) (sum(x^2))^2 } / ((n - 1)(n - 2)(n - 3)).
+#
+# That expression is location invariant, so it may be evaluated on the
+# centered data d = x - xbar, where the term in sum(d^3) drops out (it is
+# multiplied by the mean of d, which is zero) and the rest collapses to
+#
+#   { (n^2 - 2n + 3) sum(d^4) - 3 (2n - 3) / n (sum(d^2))^2 }
+#     / ((n - 1)(n - 2)(n - 3)).
+#
+# The two forms are algebraically identical; the centered one is what is
+# computed, because the raw power sums lose all precision when the mean is
+# large relative to the standard deviation (for standard normal data shifted
+# by 1e6 the raw form returned 0 where the centered form returns 2.17). The
+# estimator is exactly unbiased for any distribution with a finite fourth
+# moment.
+#
+# Authors: Ken Kelley, Francis Bilson Darku, Bhargab Chattopadhyay.
+#' @noRd
+.mu4 <- function(x, na.rm = FALSE) {
+  if (!is.numeric(x)) {
+    .smsd_stop("'x' must be a numeric vector.")
   }
-
-  if (!is.logical(na.rm)){
-    stop("The argument 'na.rm' needs to be logical")
-  }
-
-  if (is.data.frame(x)){
-    x <- as.vector(x)
-  }
-  if (na.rm == TRUE){
+  .check_flag(na.rm, "na.rm")
+  if (na.rm) {
     x <- x[!is.na(x)]
   }
-  if (length(x) < 4){
-    stop("Not enough numeric values; needs at least 4")
+  if (length(x) < 4) {
+    .smsd_stop("'x' must contain at least 4 observations.")
   }
-
-
-  n <- length(x)
-  w1 <- n^2 * sum((x - mean(x))^4)
-  w2 <- (-2*n + 3) * sum(x^4)
-  w3 <- (8*n - 12) * mean(x) * sum(x^3)
-  w4 <- (-6 + 9/n) * (sum(x^2))^2
-
-  mu4n <- (w1 + w2 + w3 + w4)/((n - 1) * (n - 2) * (n - 3))
-  return(mu4n)
+  n <- as.numeric(length(x))
+  d <- .aipe_center(x)
+  ((n^2 - 2 * n + 3) * sum(d^4) - 3 * (2 * n - 3) / n * sum(d^2)^2) /
+    ((n - 1) * (n - 2) * (n - 3))
 }

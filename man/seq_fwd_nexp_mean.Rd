@@ -2,54 +2,150 @@
 % Please edit documentation in R/seq_fwd_nexp_mean.R
 \name{seq_fwd_nexp_mean}
 \alias{seq_fwd_nexp_mean}
-\title{seq_fwd_nexp_mean}
+\title{Fixed Width Confidence Interval for the Location of a Negative
+Exponential Distribution}
 \usage{
-seq_fwd_nexp_mean(
-  data,
-  d,
-  alpha,
-  gamma,
-  pilot = FALSE,
-  verbose = FALSE,
-  na.rm = TRUE
-)
+seq_fwd_nexp_mean(x, d, conf_level = 0.95, na.rm = TRUE)
 }
 \arguments{
-\item{data}{The data for which to calculate the confidence interval.
-A numeric vector.}
+\item{x}{Numeric vector of the observations collected so far (at
+least 2).}
 
-\item{d}{Half of the confidence interval width, must be a non-zero positive
-value.}
+\item{d}{The full width of the confidence interval, in the units of the
+data: the interval reported runs from the sample minimum minus \code{d}
+up to the sample minimum. A positive number. (In the fixed width
+procedures for a mean, \code{d} is a half width; here the interval is
+one-sided, so \code{d} is its whole width.)}
 
-\item{alpha}{The significance level. A value between 0 and 1.}
+\item{conf_level}{The confidence level (default 0.95).}
 
-\item{gamma}{gamma}
-
-\item{pilot}{Should a pilot sample be generated. TRUE/FALSE value.
-default value is \code{FALSE}.}
-
-\item{verbose}{Should the criterion be printed. Default is \code{FALSE}.}
-
-\item{na.rm}{This parameter controls whether NA values are removed from
-the data prior to calculation. Default is \code{TRUE}.}
+\item{na.rm}{Logical; should \code{NA} values be removed first? Default
+\code{TRUE}. With \code{FALSE}, missing values are an error.}
 }
 \value{
-The calculated confidence interval, the sample size, data mean,
-and an indicator of if the criterion was satisfied.
+An object of class \code{c("smsd_check", "data.frame")} with
+  columns \code{term} and \code{value} and these rows:
+  \describe{
+    \item{\code{lower_limit}}{The sample minimum minus \code{d}.}
+    \item{\code{location}}{The sample minimum, the point estimate of the
+      location \eqn{\theta}.}
+    \item{\code{upper_limit}}{The sample minimum.}
+    \item{\code{optimal_n}}{The sample size the current scale estimate
+      calls for, \eqn{\lceil \log(1/\alpha)\, U_n / d \rceil} (\code{NA}
+      when the data are constant).}
+    \item{\code{current_n}}{The number of observations used.}
+  }
+  Attributes: \code{is_satisfied} (\code{TRUE} once \code{current_n} is at
+  least \code{optimal_n}), \code{current_n}, \code{criterion_n} (equal to
+  \code{optimal_n}), \code{conf_level}, \code{width} (the full width
+  \code{d}), \code{method}, \code{variance_unusable} (\code{TRUE} when the
+  data are constant, so that no scale has been estimated; the attribute has
+  the same name in every procedure of the package), and \code{notes}.
 }
 \description{
-Purely Sequential approach to Get Fixed Width Confidence Interval
-for the mean of negative exponential random variables.
+Given the data collected so far, checks the stopping rule of the purely
+sequential fixed width confidence interval for the location parameter of
+a negative exponential distribution (Mukhopadhyay and de Silva, 2009).
+The negative exponential (two parameter exponential) distribution has
+density \eqn{\sigma^{-1}\exp\{-(x - \theta)/\sigma\}} for
+\eqn{x > \theta}: \eqn{\theta} is the location, the smallest value the
+variable can take (a minimum response time, a guarantee period), and
+\eqn{\sigma} is the scale. Despite the function's name, the quantity
+estimated is the location \eqn{\theta}, not the mean (which is
+\eqn{\theta + \sigma}).
+}
+\details{
+The function does not collect data and keeps no state. Call it after each
+new observation (or batch), starting once
+\code{\link{seq_fwd_nexp_mean_pilot}} observations are in hand, and stop
+sampling the first time \code{attr(out, "is_satisfied")} is \code{TRUE}.
+
+
+The location is estimated by the sample minimum \eqn{X_{(1)}}, which can
+only overestimate it, so the interval is
+\eqn{[X_{(1)} - d,\ X_{(1)}]}, of width \code{d}. Because
+\eqn{X_{(1)} - \theta} is exponential with scale \eqn{\sigma/n}, the
+interval covers \eqn{\theta} with probability
+\eqn{1 - \exp(-n d/\sigma)}, which is at least \eqn{1 - \alpha} when
+\eqn{n \ge n^* = \log(1/\alpha)\,\sigma/d}. The sequential rule replaces
+\eqn{\sigma} by \eqn{U_n = \sum (X_i - X_{(1)})/(n - 1)}: sampling stops
+at the first \eqn{n} (at or beyond the pilot size) with
+\deqn{n \ge \log(1/\alpha)\, U_n / d .}
+The \code{optimal_n} row is the right hand side rounded up, evaluated at
+the current data.
+
+\strong{The confidence level is asymptotic.} It is attained in the limit
+as \code{d} shrinks, not at every \code{d}; for wide targets sampling
+tends to stop early on an underestimate of the scale. In simulation
+(scale 2, nominal 0.95, the pilot of \code{seq_fwd_nexp_mean_pilot()}
+with its defaults, 40,000 replications, Monte Carlo standard error
+0.001), coverage was 0.938 at \code{d = 0.4} (where the required sample
+size \eqn{n^*} is about 15). It was lowest, about 0.930, when \eqn{n^*}
+was 25, and rose from there: 0.941 at \eqn{n^*} of 40, 0.944 at
+\code{d = 0.1} (\eqn{n^*} about 60), and 0.948 at \code{d = 0.025}
+(\eqn{n^*} about 240; 400,000 replications).
+\code{\link{ts_fwd_nexp_mean}} is the two stage alternative, whose
+confidence level is guaranteed for negative exponential data.
+
+\strong{Data.} Any finite values are accepted, because the location may
+be negative. The model is right skewed with a sharp lower endpoint; the
+function cannot check that.
+
+\strong{Constant data.} If every observation is equal, or equal up to
+rounding error (a range of no more than \eqn{10^{-10}} times the largest
+absolute value), \eqn{U_n} is zero, or nothing but rounding error, and
+the rule as printed would be met at once. The function departs from the
+printed rule deliberately: no scale has been estimated, so the rule is
+reported as not met, \code{optimal_n} is \code{NA},
+\code{attr(out, "variance_unusable")} is \code{TRUE}, and a note says so
+(see \code{\link{smsd_check_methods}}); data whose real spread is that
+small beside their size should have a common value subtracted first.
+The limits are still reported (the sample minimum minus \code{d}, and
+the sample minimum, which involve no estimate of the scale), but they are
+then not an interval to report: \code{summary()}, \code{glance()}, and
+\code{tidy()} return them without the note, so test
+\code{attr(out, "variance_unusable")} before using them.
+
+\strong{Extreme units.} Data that do vary, but whose spread is at the
+very edge of double precision, so that the scale estimate cannot be
+represented (differences among the observations near \eqn{10^{308}} or
+near \eqn{10^{-323}}), are an error that says to change the units. That
+case is not reported as a rule not yet met, because collecting more data
+cannot help.
 }
 \examples{
-pilot_ss <- seq_fwd_nexp_mean(alpha=0.05, d=0.2, gamma=1, pilot=TRUE)
-SLS <- rexp(pilot_ss, rate=1)
-seq_fwd_nexp_mean(data=SLS, d=0.2, alpha=0.05, pilot=FALSE)
+# Shortest possible response time on a reaction task (seconds), to
+# within 0.05 seconds with 95\% confidence. Times are simulated as a
+# minimum of 0.20 seconds plus an exponential delay averaging 0.30.
+set.seed(113)
+m <- seq_fwd_nexp_mean_pilot(d = 0.05, conf_level = 0.95)
+times <- 0.20 + rexp(m, rate = 1 / 0.30)
+out <- seq_fwd_nexp_mean(times, d = 0.05, conf_level = 0.95)
+out
+
+# Add one trial at a time until the stopping rule is met.
+while (!attr(out, "is_satisfied")) {
+  times <- c(times, 0.20 + rexp(1, rate = 1 / 0.30))
+  out <- seq_fwd_nexp_mean(times, d = 0.05, conf_level = 0.95)
+}
+out
+
 }
 \references{
-Mukhopadhyay, N., \& de Silva, Basil M. (2009). \emph{Sequential Methods and Their Applications}. New York: CRC Press.
+Mukhopadhyay, N., & de Silva, B. M. (2009). \emph{Sequential methods and
+their applications}. Chapman & Hall/CRC. ISBN:9780367386535
+}
+\seealso{
+\code{\link{seq_fwd_nexp_mean_pilot}};
+  \code{\link{ts_fwd_nexp_mean}} for the two stage procedure;
+  \code{\link{seq_mr_nexp_mean}} for minimum risk point estimation of the
+  same location.
+
+Other seq_fwd_nexp_mean:
+\code{\link[=seq_fwd_nexp_mean_pilot]{seq_fwd_nexp_mean_pilot()}}
 }
 \author{
-Bhargab Chattopadhyay \email{Bhargab@iiitvadodara.ac.in},
-Neetu Shah \email{201451015@iiitvadodara.ac.in}, Ken Kelley \email{kkelley@nd.edu}
+Ken Kelley \email{kkelley@nd.edu},
+  Bhargab Chattopadhyay \email{bhargab@iiitvadodara.ac.in}
 }
+\concept{seq_fwd_nexp_mean}

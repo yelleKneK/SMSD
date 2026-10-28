@@ -1,0 +1,371 @@
+---
+output:
+  github_document:
+    html_preview: false
+---
+
+<!-- README.md is generated from README.Rmd. Edit README.Rmd, then run
+     devtools::build_readme(). Every number below is computed when the file
+     is knit; the simulation chunk takes a few minutes. -->
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+description <- read.dcf("DESCRIPTION")
+needs <- trimws(strsplit(description[1, "Depends"], ",")[[1]])
+needs_r <- sub("^R \\(>= (.*)\\)$", "\\1", grep("^R ", needs, value = TRUE))
+needs_dmar <- sub("^DMAR \\(>= (.*)\\)$", "\\1", grep("^DMAR", needs, value = TRUE))
+stopifnot(length(needs_r) == 1, length(needs_dmar) == 1)
+```
+
+# SMSD <img src="man/figures/logo.png" align="right" height="139" alt="SMSD hex logo" />
+
+SMSD (Sequential Methods for Study Design) is for researchers who have to
+plan a study without knowing the population values that a sample size
+formula asks for: a standard deviation, a correlation, or the effect size
+itself. A sequential procedure does not guess them. Data are collected in
+stages, and after each stage a stopping rule computed from the data in hand
+says whether the goal has been reached. The goal can be a confidence
+interval as narrow as requested (accuracy in parameter estimation, AIPE),
+an estimate whose combined cost of estimation error and of sampling is as
+small as it can be made (minimum risk point estimation, MRPE), or the most
+precise estimate of a contrast that a fixed budget can buy. The methods are
+general; the articles that developed them have psychology, education,
+management, and related fields in view. The confidence interval procedures
+for effect sizes assume no particular distribution for the data, with the
+exception of the one for the squared multiple correlation.
+
+## Installation
+
+```{r install, eval = FALSE}
+# The released version, from CRAN
+install.packages("SMSD")
+
+# Or the development version, from GitHub (one of the two, not both)
+# install.packages("remotes")
+# remotes::install_github("yelleKneK/SMSD")
+```
+
+Install the source tarball identified by the release record when you need
+this exact version. A CRAN mirror or the public GitHub branch can serve a
+different version, so verify `packageVersion("SMSD")` after installation.
+The tarball can be installed with `install.packages("SMSD_1.0.0.tar.gz",
+repos = NULL, type = "source")`; install its required dependencies first.
+The package needs DMAR 1.0.0 or later and R 4.0.0 or later.
+
+For the replication of published examples, see
+`vignette("published-examples", package = "SMSD")`. For measured coverage,
+sample sizes, and figures from difficult designs, see
+`vignette("coverage-and-design", package = "SMSD")`.
+
+## Where to Start
+
+Start with `seq_aipe_smd()`, the standardized mean difference between two
+groups. Suppose a training program is compared with a control condition on
+employee engagement, and the aim is a 95% confidence interval for the
+standardized mean difference that is no wider than 0.60. The pilot function
+gives the first sample size, and the check function says whether sampling
+can stop. (The data are simulated, with a true difference of 0.4 standard
+deviations, so that the example runs on its own.)
+
+```{r start, message = FALSE}
+library(SMSD)
+set.seed(113)
+trained <- rnorm(seq_aipe_smd_pilot(width = 0.60), mean = 4.9)
+control <- rnorm(seq_aipe_smd_pilot(width = 0.60), mean = 4.5)
+seq_aipe_smd(trained, control, width = 0.60)
+```
+
+```{r start-facts, include = FALSE}
+first <- seq_aipe_smd(trained, control, width = 0.60)
+stopifnot(!attr(first, "is_satisfied"))
+```
+
+With the pilot sample of `r length(trained)` people per group the rule is
+not met: the criterion asks for `r attr(first, "criterion_n")` per group as
+things stand, and that number is updated at every check. A study therefore
+adds participants and checks again, until the rule is met. `seq_report()`
+then writes the result up.
+
+```{r continue}
+out <- seq_aipe_smd(trained, control, width = 0.60)
+while (!attr(out, "is_satisfied")) {
+  trained <- c(trained, rnorm(1, mean = 4.9))
+  control <- c(control, rnorm(1, mean = 4.5))
+  out <- seq_aipe_smd(trained, control, width = 0.60)
+}
+seq_report(out)
+```
+
+```{r continue-facts, include = FALSE}
+limits <- out$value[out$term %in% c("lower_limit", "upper_limit")]
+stopifnot(attr(out, "is_satisfied"), diff(limits) <= 0.60,
+          limits[1] < 0.4, 0.4 < limits[2])
+```
+
+The final interval is `r sprintf("%.3f", diff(limits))` wide (computed
+from the limits before they are rounded for the report), within the 0.60
+requested, and it contains the 0.4 used to generate the data. The check
+function does not prompt and keeps nothing between calls: the loop belongs
+to the study, and each call is a calculation on the data collected so far. For data already in hand, `seq_path()` runs the same loop in one
+call and `plot()` draws it. `vignette("introduction", package = "SMSD")` is
+the overview, and `vignette("step-by-step-sequential-workflow", package =
+"SMSD")` follows one study from its pilot sample to its stopping point.
+
+## Which Function Do I Need?
+
+```{r table-facts, include = FALSE}
+exports <- getNamespaceExports("SMSD")
+pilots <- grep("_pilot$", exports, value = TRUE)
+sensitivity <- grep("_sensitivity$", exports, value = TRUE)
+checks <- sub("_pilot$", "", pilots)
+stopifnot(all(checks %in% exports))
+```
+
+| What you want | Function | Source |
+|---|---|---|
+| **A Narrow Confidence Interval for an Effect Size** | | |
+| Standardized mean difference | `seq_aipe_smd()` | Kelley, Darku, & Chattopadhyay (2018) |
+| Pearson, Kendall, or Spearman correlation | `seq_aipe_r()` | Kelley, Darku, & Chattopadhyay (2019) |
+| Squared multiple correlation (multivariate normal data) | `seq_aipe_R2()` | Kelley, Darku, & Chattopadhyay (2019) |
+| Coefficient of variation | `seq_aipe_cv()` | Kelley, Darku, & Chattopadhyay (2018) |
+| Simple linear regression slope | `seq_aipe_reg_coef()` | Kelley, Darku, & Chattopadhyay (2018) |
+| Standardized mean | `seq_aipe_sm()` | Kelley, Darku, & Chattopadhyay (2018) |
+| Contrast of group means | `seq_aipe_c()` | Kelley, Darku, & Chattopadhyay (2018) |
+| Gini index | `seq_aipe_gini()` | Chattopadhyay & De (2016) |
+| **Minimum Risk Point Estimation** (the smallest combined cost of error and of sampling) | | |
+| Coefficient of variation | `seq_mr_cv()` | Chattopadhyay & Kelley (2016) |
+| Standardized mean difference, with one sampling cost or one per group | `seq_mr_smd()` | Chattopadhyay & Kelley (2017) |
+| **A Budget Across Groups** | | |
+| The check, and the group to sample next | `seq_budget()`, `seq_budget_next()` | Chattopadhyay, Bandyopadhyay, Kelley, & Padalunkal (2025) |
+| The allocation if the standard deviations were known | `seq_budget_optimal()` | Chattopadhyay, Bandyopadhyay, Kelley, & Padalunkal (2025) |
+| A noninferiority, superiority, inferiority, or equivalence decision | `decide_seq_budget_noninferiority()`, `decide_seq_budget_superiority()`, `decide_seq_budget_inferiority()`, `decide_seq_budget_equivalence()` | Chattopadhyay, Bandyopadhyay, Kelley, & Padalunkal (2025) |
+| **Classical Procedures for a Mean, a Median, or a Location** | | |
+| A fixed width interval for a mean | `seq_fwd_norm_mean()`, `seq_fwd_dfr_mean()`; in two stages, `ts_fwd_norm_mean()`, `ts_fwd_dfr_mean()` | Mukhopadhyay & de Silva (2009) |
+| The location of a negative exponential distribution | `seq_fwd_nexp_mean()`, `ts_fwd_nexp_mean()`, `seq_mr_nexp_mean()` | Mukhopadhyay & de Silva (2009) |
+| An interval of bounded length for a median | `seq_blci_dfr_median()` | Mukhopadhyay & de Silva (2009) |
+| A mean estimated with bounded risk | `seq_br_norm_mean()`; in two stages, `ts_br_norm_mean()`, `ts_br_exp_mean()` | Mukhopadhyay & de Silva (2009) |
+| A mean estimated with minimum risk | `seq_mr_norm_mean()`, `seq_mr_exp_mean()`, `seq_mr_dfr_mean_arb()` | Mukhopadhyay & de Silva (2009) |
+| **Studying a Design Before Collecting Data** | | |
+| The final sample size, interval width, and coverage to expect | `seq_aipe_smd_sensitivity()` and its siblings for every `seq_aipe_*` function | The article of the procedure simulated |
+| The final sample size and risk to expect | `seq_mr_cv_sensitivity()`, `seq_mr_smd_sensitivity()` | The article of the procedure simulated |
+| The cost, coverage, and decisions to expect under a budget | `seq_budget_sensitivity()` | Chattopadhyay, Bandyopadhyay, Kelley, & Padalunkal (2025) |
+| **Reading and Reporting a Result** | | |
+| The result of one check | `print()`, `summary()`, `generics::tidy()`, `generics::glance()` | This package |
+| The whole stopping path for data in hand, and its picture | `seq_path()`, `plot()` | This package |
+| A paragraph for the methods or results section | `seq_report()` | This package; the paragraph cites the article of the procedure |
+
+Each of the `r length(checks)` check functions has a companion that returns
+its pilot sample size and is named by adding `_pilot`, as in
+`seq_aipe_smd_pilot()`. In all, the package exports `r length(exports)`
+functions, `r length(sensitivity)` of them `_sensitivity()` functions.
+`help("SMSD-package")` lists every one of them with a link.
+
+The `seq_aipe_*` functions take the full width of the interval as `width`.
+The classical interval procedures take `d`, and what `d` measures depends on
+the procedure: the half width of the interval for a mean
+(`seq_fwd_norm_mean()`, `seq_fwd_dfr_mean()`, `ts_fwd_norm_mean()`,
+`ts_fwd_dfr_mean()`), the full width for the location of a negative
+exponential distribution (`seq_fwd_nexp_mean()`, `ts_fwd_nexp_mean()`), and
+half of the largest length allowed for the interval for a median
+(`seq_blci_dfr_median()`). Likewise `gamma` has two meanings. In
+`seq_mr_cv()`, `seq_mr_smd()`, `seq_mr_dfr_mean_arb()`, and their pilot
+functions it is the exponent of the correction term
+*n*<sup>−γ</sup> in the stopping rule; in the other pilot functions of the
+classical procedures it is a constant of the pilot rule that sets the size
+of the pilot sample. Each help page says which.
+
+## What the Procedures Guarantee
+
+The `seq_aipe_*` procedures deliver the requested width by construction:
+when the stopping rule is met, the interval is no wider than the target.
+Coverage is a different matter. It is an asymptotic property, reached as
+the target narrows and the final sample grows, and it can fall well short
+of the confidence level in the small samples that a wide target, a strong
+relationship, or many predictors produce. The sensitivity functions show
+what to expect before any data are collected. Each row below is one call.
+
+```{r guarantee}
+G <- 2000
+runs <- list(
+  "Standardized mean difference of 0.5, width 0.8" =
+    seq_aipe_smd_sensitivity(0.5, width = 0.8, G = G, seed = 113),
+  "Pearson correlation of 0.4, width 0.4" =
+    seq_aipe_r_sensitivity(0.4, width = 0.4, G = G, seed = 113),
+  "Pearson correlation of 0.8, width 0.4" =
+    seq_aipe_r_sensitivity(0.8, width = 0.4, G = G, seed = 113),
+  "Regression slope of 0.5, width 0.4" =
+    seq_aipe_reg_coef_sensitivity(0.5, width = 0.4, G = G, seed = 113),
+  "Coefficient of variation of 0.5, lognormal data, width 0.2" =
+    seq_aipe_cv_sensitivity(0.5, width = 0.2, distribution = "lognormal",
+                            G = G, seed = 113),
+  "Squared multiple correlation of 0.5, 5 predictors, width 0.3" =
+    seq_aipe_R2_sensitivity(0.5, width = 0.3, p = 5, G = G, seed = 113),
+  "Squared multiple correlation of 0.5, 15 predictors, width 0.3" =
+    seq_aipe_R2_sensitivity(0.5, width = 0.3, p = 15, G = G, seed = 113)
+)
+row_of <- function(term) vapply(runs, function(run) run$value[run$term == term], 0)
+knitr::kable(
+  data.frame(names(runs), row_of("mean_n"), row_of("pct_width_within"),
+             row_of("coverage")),
+  digits = c(0, 0, 0, 2), row.names = FALSE,
+  col.names = c("Design", "Mean final sample size",
+                "Intervals within the width (%)", "Coverage of the 95% interval")
+)
+```
+
+```{r guarantee-facts, include = FALSE}
+coverage <- row_of("coverage")
+se <- sqrt(coverage * (1 - coverage) / G)
+strong <- grep("correlation of 0.8", names(runs))
+weak <- grep("correlation of 0.4", names(runs))
+stopifnot(all(row_of("pct_width_within") == 100), all(row_of("pct_hit_max_n") == 0),
+          abs(coverage[1] - 0.95) < 3 * se[1], all(coverage[-1] < 0.90),
+          which.min(coverage) == length(coverage),
+          grepl("15 predictors", names(runs)[length(runs)]),
+          length(strong) == 1, length(weak) == 1,
+          coverage[strong] < coverage[weak])
+two <- function(x) sprintf("%.2f", x)
+# The sentences below quote the table, so the two ways of rounding must agree.
+stopifnot(identical(two(coverage), format(round(unname(coverage), 2), nsmall = 2)))
+```
+
+Every interval in every row was within its target width. Coverage was close
+to the nominal level for the standardized mean difference
+(`r two(coverage[1])`, with a Monte Carlo standard error of
+`r sprintf("%.3f", se[1])`) and well below it in the other rows, from
+`r two(max(coverage[-1]))` down to
+`r two(min(coverage[-1]))` for the squared multiple correlation with 15
+predictors. For the Pearson correlation it was lower for the strong
+relationship (`r two(coverage[strong])`) than for the moderate one
+(`r two(coverage[weak])`). Each figure comes from
+`r format(G, big.mark = ",")` simulated studies and has a Monte Carlo
+standard error of at most `r sprintf("%.3f", max(se))`, so another run of
+the same design, such as the one a help page reports, can differ from it in
+the second decimal. (The sample sizes count observations per group for the
+standardized mean difference, pairs for the correlation and the slope, and
+observations otherwise.) A narrower target, which means a larger study,
+brings coverage toward the nominal level; a larger minimum pilot sample
+(`m_0`) helps as well. The help page of each `seq_aipe_*` function states
+what its guarantee is and reports what was measured for it, and
+`?seq_aipe_sensitivity` has a table over more conditions.
+
+In a small sample the variance estimate that a stopping rule needs can be
+zero, negative, or not finite. The check functions then report the rule as
+not met, with a note, and sampling continues. This is a deliberate departure
+from the rules as printed in the articles, under which the study would stop
+at once with an interval far narrower than requested; the section "An
+Unusable Variance Estimate" of `help("SMSD-package")` describes it.
+
+The classical procedures state their guarantees on their help pages as well.
+Some are exact: Stein's two stage interval, `ts_fwd_norm_mean()`, covers a
+normal mean with at least the stated probability for any first stage. Others
+are asymptotic: the distribution free two stage interval,
+`ts_fwd_dfr_mean()`, covers a normal mean with probability
+`r sprintf("%.3f", 2 * pt(qnorm(0.975), df = 29) - 1)` at a nominal 0.95 when
+the first stage has 30 observations and the target is narrow, and with less
+for skewed data.
+
+## Validation
+
+```{r validation-facts, include = FALSE}
+study <- readRDS(system.file("extdata", "aipe_simulation_results.rds",
+                             package = "SMSD"))
+conditions <- nrow(study$summary)
+replications <- unique(study$summary$G)
+stopifnot(is.data.frame(study$summary), conditions > 0,
+          length(replications) == 1, replications >= 1000)
+test_files <- length(list.files("tests/testthat", pattern = "^test-.*[.]R$"))
+stopifnot(test_files > 0,
+          nzchar(system.file("eq26_correction.pdf", package = "SMSD")),
+          nzchar(system.file("cv_variance_note.md", package = "SMSD")))
+```
+
+* **Tests that pin published values.** The test suite (`r test_files` test
+  files) compares the package with numbers printed in the source articles:
+  rows of Tables 2, 3, and 4 of Kelley, Darku, and Chattopadhyay (2018);
+  rows of Tables 2, 10, 11, 13, and 14 of Kelley, Darku, and Chattopadhyay
+  (2019); the worked examples and rows of Table 1 of Chattopadhyay and
+  Kelley (2016) and of Table 3 of Chattopadhyay and Kelley (2017); and the
+  allocation example and Table 1 of Chattopadhyay, Bandyopadhyay, Kelley,
+  and Padalunkal (2025). One published row is not reproduced in full, and
+  its test records the difference: for Kendall's tau (Table 8 of the 2019
+  article) coverage and interval width are close to the article's, but the
+  mean final sample size runs about 2 percent above the published one and
+  varies nearly twice as much from study to study. The cause is not
+  resolved. Where no table exists, a procedure is run to its stopping point
+  and compared with its theoretical sample size or its exact guarantee.
+* **A cached simulation study.** A study of the standardized mean difference
+  and Pearson correlation procedures under normal and skewed data
+  (`r conditions` conditions, `r format(replications, big.mark = ",")`
+  replications each) is installed with the package, at
+  `system.file("extdata", "aipe_simulation_results.rds", package = "SMSD")`,
+  and is displayed and discussed in `vignette("complete-tour", package =
+  "SMSD")`. The script that produces it is in the `data-raw` folder of the
+  source repository.
+* **Two notes on departures from the articles as printed.** The variance of
+  the standardized mean difference corrects an omitted factor of 1/2 in
+  Equation 26 of Kelley, Darku, and Chattopadhyay (2018). The correction is
+  installed with the package
+  (`system.file("eq26_correction.pdf", package = "SMSD")`) and is posted by
+  the authors at
+  <https://kenkelley.org/wp-content/uploads/articles/Kelley_Darku_Chattopadhyay_Equation_26.pdf>.
+  In `seq_mr_cv()` the variance of the coefficient of variation is by
+  default the estimator of Kelley, Darku, and Chattopadhyay (2018), which is
+  consistent for any distribution with a finite fourth moment. Equation 22
+  of Chattopadhyay and Kelley (2016) agrees with it for normal data, and
+  for any population with no excess kurtosis, and can differ otherwise;
+  `variance = "published"` uses that equation, so that the article can be
+  reproduced. The derivation is in a note installed with the package
+  (`system.file("cv_variance_note.md", package = "SMSD")`), and `?seq_mr_cv`
+  summarizes it.
+* **A comparison with the published tables.** The validation article of the
+  package website (`vignettes/articles/validation.Rmd` in the source
+  repository) sets the package's results beside the published ones, table
+  by table.
+
+## How to Cite
+
+```{r cite-facts, include = FALSE}
+entries <- utils::readCitationFile("inst/CITATION",
+                                   meta = as.list(description[1, ]))
+articles <- sum(vapply(entries, function(entry) entry$bibtype == "Article", NA))
+stopifnot(articles == length(entries) - 1, articles >= 1, articles <= 9)
+in_words <- c("one", "two", "three", "four", "five", "six", "seven", "eight",
+              "nine")
+```
+
+`citation("SMSD")` gives the package entry and the `r in_words[articles]`
+articles listed here, and `toBibtex(citation("SMSD"))` gives them as BibTeX
+entries.
+Please cite the package and the article that developed the method you used.
+The book is the source of the classical procedures.
+
+* Chattopadhyay, B., Bandyopadhyay, T., Kelley, K., & Padalunkal, J. J.
+  (2025). A sequential approach for noninferiority or equivalence of a
+  linear contrast under cost constraints. *Psychological Methods, 30*(2),
+  425--439. [doi:10.1037/met0000570](https://doi.org/10.1037/met0000570)
+* Chattopadhyay, B., & De, S. K. (2016). Estimation of Gini index within
+  pre-specified error bound. *Econometrics, 4*(3), 30.
+  [doi:10.3390/econometrics4030030](https://doi.org/10.3390/econometrics4030030)
+* Chattopadhyay, B., & Kelley, K. (2016). Estimation of the coefficient of
+  variation with minimum risk: A sequential method for minimizing sampling
+  error and study cost. *Multivariate Behavioral Research, 51*(5), 627--648.
+  [doi:10.1080/00273171.2016.1203279](https://doi.org/10.1080/00273171.2016.1203279)
+* Chattopadhyay, B., & Kelley, K. (2017). Estimating the standardized mean
+  difference with minimum risk: Maximizing accuracy and minimizing cost with
+  sequential estimation. *Psychological Methods, 22*(1), 94--113.
+  [doi:10.1037/met0000089](https://doi.org/10.1037/met0000089)
+* Kelley, K., Darku, F. B., & Chattopadhyay, B. (2018). Accuracy in
+  parameter estimation for a general class of effect sizes: A sequential
+  approach. *Psychological Methods, 23*(2), 226--243.
+  [doi:10.1037/met0000127](https://doi.org/10.1037/met0000127)
+* Kelley, K., Darku, F. B., & Chattopadhyay, B. (2019). Sequential accuracy
+  in parameter estimation for population correlation coefficients.
+  *Psychological Methods, 24*(4), 492--515.
+  [doi:10.1037/met0000203](https://doi.org/10.1037/met0000203)
+* Mukhopadhyay, N., & de Silva, B. M. (2009). *Sequential methods and their
+  applications*. Chapman & Hall/CRC. ISBN\:9780367386535
+
+## License
+
+GPL (>= 3).

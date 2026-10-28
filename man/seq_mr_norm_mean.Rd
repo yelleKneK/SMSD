@@ -2,55 +2,165 @@
 % Please edit documentation in R/seq_mr_norm_mean.R
 \name{seq_mr_norm_mean}
 \alias{seq_mr_norm_mean}
-\title{seq_mr_norm_mean}
+\title{Minimum Risk Point Estimation of a Normal Mean}
 \usage{
-seq_mr_norm_mean(
-  data,
-  A,
-  c,
-  price,
-  epsilon,
-  pilot = FALSE,
-  verbose = FALSE,
-  na.rm = TRUE
-)
+seq_mr_norm_mean(x, A = NULL, c, price = NULL, epsilon = NULL, na.rm = TRUE)
 }
 \arguments{
-\item{data}{The data for which to calculate the minimum risk point.}
+\item{x}{Numeric vector of the observations collected so far (at
+least 2).}
 
-\item{A}{The loss function constant.}
+\item{A}{The loss constant: the price of one unit of squared estimation
+error, in the same currency as \code{c}. A positive number. Either
+supply \code{A} directly, or supply \code{price} and \code{epsilon},
+in which case \eqn{A = \mathrm{price}/\mathrm{epsilon}^2}.}
 
-\item{c}{The cost of a sampling a unit.}
+\item{c}{The cost of sampling one observation. A positive number.}
 
-\item{price}{price}
+\item{price, epsilon}{An alternative way to state \code{A} (Chattopadhyay
+and Kelley, 2016): \code{price} is the amount one is willing to pay for
+an estimate within \code{epsilon} of the mean, and
+\eqn{A = \mathrm{price}/\mathrm{epsilon}^2}. Both positive numbers;
+supply both or neither.}
 
-\item{epsilon}{epislon}
-
-\item{pilot}{Should a pilot sample be generated. TRUE/FALSE value.
-default value is \code{FALSE}.}
-
-\item{verbose}{Should the criterion be printed. Default is \code{FALSE}.}
-
-\item{na.rm}{This parameter controls whether NA values are removed from
-the data prior to calculation. Default is \code{TRUE}.}
+\item{na.rm}{Logical; should \code{NA} values be removed first? Default
+\code{TRUE}. With \code{FALSE}, missing values are an error.}
 }
 \value{
-The calculated risk, the sample size, mean, standard deviation, and
-an indicator of if the criterion was satisfied.
+An object of class \code{c("smsd_check", "data.frame")} with
+  columns \code{term} and \code{value} and these rows:
+  \describe{
+    \item{\code{mean}}{The sample mean, the point estimate.}
+    \item{\code{risk}}{The estimated risk at the current sample size,
+      \eqn{A S_n^2/n + c\,n}.}
+    \item{\code{optimal_n}}{The sample size the current estimate of the
+      standard deviation calls for,
+      \eqn{\lceil (A/c)^{1/2} S_n \rceil}.}
+    \item{\code{current_n}}{The number of observations used.}
+  }
+  \code{risk} and \code{optimal_n} are \code{NA} when the data are
+  constant. Attributes: \code{is_satisfied} (\code{TRUE} when
+  \code{current_n} has reached \code{optimal_n}), \code{current_n},
+  \code{criterion_n} (equal to \code{optimal_n}), \code{method},
+  \code{loss_A}, \code{cost_c}, \code{variance_unusable} (\code{TRUE}
+  when the data are constant, so that no variance has been estimated),
+  and \code{notes}. \code{conf_level} and \code{width} are \code{NULL}.
 }
 \description{
-Two Stage approach to Get minimum Risk Point Estimation
- for normal random variables.
+Given the data collected so far, checks the stopping rule of the purely
+sequential minimum risk point estimation (MRPE) procedure for the mean of
+a normal population with unknown variance (Mukhopadhyay and de Silva,
+2009, Section 6.4, who credit the original formulation to Robbins, 1959).
+Estimation error and sampling both cost something; the procedure looks
+for the sample size at which their expected total, the risk, is smallest.
+That sample size depends on the unknown variance, so observations are
+collected until the sample size reaches the size the current variance
+estimate calls for. The procedure is risk based, so there is no
+confidence level.
+}
+\details{
+The function does not collect data and keeps no state. Call it after each
+new observation (or batch), starting once
+\code{\link{seq_mr_norm_mean_pilot}} observations are in hand, and stop
+sampling the first time \code{attr(out, "is_satisfied")} is \code{TRUE}.
+
+
+The loss from estimating the mean \eqn{\mu} by the sample mean of
+\eqn{n} observations is
+\deqn{L_n = A(\bar{X}_n - \mu)^2 + c\,n}
+(Mukhopadhyay and de Silva, 2009, Equation 6.4.1): \eqn{A} prices a unit
+of squared estimation error and \eqn{c} is the cost of one observation.
+Its expectation for a fixed \eqn{n}, the risk, is
+\eqn{A\sigma^2/n + c\,n} (their Equation 6.4.2), which is smallest at
+\eqn{n^* = (A/c)^{1/2}\sigma} (their Equation 6.4.3), where it equals
+\eqn{2 c\,n^*}. The sequential rule replaces \eqn{\sigma} by the sample
+standard deviation \eqn{S_n}: sampling stops at the first \eqn{n} (at or
+beyond the pilot size) with
+\deqn{n \ge (A/c)^{1/2} S_n .}
+The \code{optimal_n} row is the right hand side rounded up, and the
+\code{risk} row is the estimated risk at the current sample size,
+\eqn{A S_n^2/n + c\,n}; both are evaluated at the current data.
+
+\strong{The optimality is asymptotic.} As the cost per observation falls
+(so that \eqn{n^*} grows), the expected final sample size approaches
+\eqn{n^*} and the risk of the procedure approaches the minimum
+\eqn{2 c\,n^*}. When \eqn{n^*} is small the procedure sometimes stops
+early on an underestimate of the standard deviation, and its risk is
+somewhat above the minimum. In simulation (normal data, the pilot of
+\code{seq_mr_norm_mean_pilot()} with its defaults, 40,000 replications,
+Monte Carlo standard error at most 0.005), with a standard deviation of
+1 the ratio of the risk to the minimum was 1.07, 1.06, 1.04, 1.01, and
+1.00 when \eqn{n^*} was 10, 15, 20, 50, and 100 (that is, when
+\eqn{A/c} was 100, 225, 400, 2,500, and 10,000, for which the pilot is
+4, 4, 5, 8, and 10). The ratio is not a function of \eqn{n^*} alone: the
+pilot depends only on \eqn{A/c}, so the same \eqn{n^*} reached with
+another standard deviation starts from a different pilot. With a
+standard deviation of 0.25 (pilots of 7 to 20) the five ratios were
+1.02, 1.03, 1.02, 1.01, and 1.00, and with a standard deviation of 4
+(pilots of 4 or 5) they were 1.07, 1.07, 1.04, 1.00, and 1.00.
+
+\strong{Constant data.} If every observation is equal, or equal up to
+rounding error (a range of no more than \eqn{10^{-10}} times the largest
+absolute value, as with gain scores of 0.3 computed as posttest minus
+pretest), the standard deviation estimate is zero, or nothing but
+rounding error, and the rule as printed would be met at once. The
+function departs from the printed rule deliberately: no variance has been
+estimated, so the rule is reported as not met, \code{risk} and
+\code{optimal_n} are \code{NA}, \code{attr(out, "variance_unusable")} is
+\code{TRUE}, and a note says so (see \code{\link{smsd_check_methods}});
+data whose real spread is that small beside their size should have a
+common value subtracted first.
+
+\strong{Extreme units.} Data that do vary, but whose spread is so large
+or so small that the sample variance cannot be represented in double
+precision (differences among the observations beyond about
+\eqn{10^{154}} or below about \eqn{10^{-162}}), are an error that says
+to change the units. That case is not reported as a rule not yet met,
+because collecting more data cannot help.
 }
 \examples{
-pilot_ss <- seq_mr_norm_mean(A=100, c=0.5, pilot=TRUE)
-SLS <- rnorm(pilot_ss)
-seq_mr_norm_mean(data=SLS, A=100, c=0.5, pilot=FALSE)
+# A school district wants its mean test score. An error of one point
+# (squared) is valued at 2,500 dollars and testing one more student
+# costs 4 dollars. Scores are simulated here with a standard deviation
+# of 12, so the best sample size is sqrt(2500 / 4) * 12 = 300.
+set.seed(113)
+m <- seq_mr_norm_mean_pilot(A = 2500, c = 4)
+scores <- rnorm(m, mean = 70, sd = 12)
+out <- seq_mr_norm_mean(scores, A = 2500, c = 4)
+out
+
+# Add one student at a time until the stopping rule is met.
+while (!attr(out, "is_satisfied")) {
+  scores <- c(scores, rnorm(1, mean = 70, sd = 12))
+  out <- seq_mr_norm_mean(scores, A = 2500, c = 4)
+}
+out
+
 }
 \references{
-Mukhopadhyay, N., \& de Silva, Basil M. (2009). \emph{Sequential Methods and Their Applications}. New York: CRC Press.
+Chattopadhyay, B., & Kelley, K. (2016). Estimation of the coefficient
+of variation with minimum risk: A sequential method for minimizing
+sampling error and study cost. \emph{Multivariate Behavioral Research},
+\emph{51}(5), 627--648. \doi{10.1080/00273171.2016.1203279}
+
+Mukhopadhyay, N., & de Silva, B. M. (2009). \emph{Sequential methods and
+their applications}. Chapman & Hall/CRC. ISBN:9780367386535
+
+Robbins, H. (1959). Sequential estimation of the mean of a normal
+population. In U. Grenander (Ed.), \emph{Probability and statistics: The
+Harald Cramer volume} (pp. 235--245). Almqvist & Wiksell.
+}
+\seealso{
+\code{\link{seq_mr_norm_mean_pilot}} for the pilot. With no
+  normality assumption: \code{\link{seq_mr_dfr_mean_arb}}. To bound the
+  risk of the same kind of loss instead of trading it against cost:
+  \code{\link{seq_br_norm_mean}}.
+
+Other seq_mr_norm_mean:
+\code{\link[=seq_mr_norm_mean_pilot]{seq_mr_norm_mean_pilot()}}
 }
 \author{
-Bhargab Chattopadhyay \email{Bhargab@iiitvadodara.ac.in},
-Neetu Shah \email{201451015@iiitvadodara.ac.in}, Ken Kelley \email{kkelley@nd.edu}
+Bhargab Chattopadhyay \email{bhargab@iiitvadodara.ac.in},
+  Ken Kelley \email{kkelley@nd.edu}
 }
+\concept{seq_mr_norm_mean}

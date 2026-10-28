@@ -2,58 +2,152 @@
 % Please edit documentation in R/ts_fwd_nexp_mean.R
 \name{ts_fwd_nexp_mean}
 \alias{ts_fwd_nexp_mean}
-\title{ts_fwd_nexp_mean}
+\title{Two Stage Fixed Width Interval for a Negative Exponential Location}
 \usage{
 ts_fwd_nexp_mean(
-  data,
+  pilot_data,
+  additional_data = NULL,
   d,
-  alpha,
-  gamma,
-  pilot = FALSE,
-  verbose = FALSE,
+  conf_level = 0.95,
   na.rm = TRUE
 )
 }
 \arguments{
-\item{data}{The data for which to calculate the confidence interval.
-A numeric vector.}
+\item{pilot_data}{Numeric vector of the first stage observations, at
+least two. The whole first stage must be supplied at every call,
+because it alone determines the total sample size.}
 
-\item{d}{Half of the confidence interval width, must be a non-zero positive
-value.}
+\item{additional_data}{Numeric vector of the second stage observations
+collected so far, or \code{NULL} (the default) when none have been
+collected.}
 
-\item{alpha}{The significance level. A value between 0 and 1.}
+\item{d}{The full width of the confidence interval, in the units of the
+data. A single positive number.}
 
-\item{gamma}{gamma}
+\item{conf_level}{The confidence level, strictly between 0 and 1.
+Default 0.95.}
 
-\item{pilot}{Should a pilot sample be generated. True/False value.
-default value is \code{FALSE}.}
-
-\item{verbose}{Should the criterion be printed. Default is \code{FALSE}.}
-
-\item{na.rm}{This parameter controls whether NA values are removed from
-the data prior to calculation. Default is \code{TRUE}.}
+\item{na.rm}{Logical. If \code{TRUE} (the default), missing values are
+removed from both stages before anything is computed; if
+\code{FALSE}, a missing value is an error.}
 }
 \value{
-The calculated confidence interval, the sample size, data mean,
-and an indicator of if the criterion was satisfied.
+An object of class \code{c("smsd_check", "data.frame")} (see
+  \code{\link{smsd_check_methods}} for its \code{print()},
+  \code{summary()}, and \code{tidy()} methods) with columns \code{term}
+  and \code{value} and five rows:
+  \describe{
+    \item{\code{lower_limit}}{\eqn{X_{(1)} - d}, with \eqn{X_{(1)}} the
+      smallest of all observations supplied.}
+    \item{\code{location}}{\eqn{X_{(1)}}, the estimate of
+      \eqn{\theta}.}
+    \item{\code{upper_limit}}{\eqn{X_{(1)}}; the interval is one-sided,
+      so its upper limit is the estimate itself.}
+    \item{\code{optimal_n}}{The total sample size \eqn{N} fixed by the
+      first stage.}
+    \item{\code{current_n}}{The number of observations supplied, both
+      stages together.}
+  }
+  Attributes: \code{is_satisfied} (\code{TRUE} once \code{current_n} is at
+  least \code{optimal_n}), \code{current_n}, \code{criterion_n} (equal to
+  \code{optimal_n}), \code{conf_level}, \code{width} (the full width
+  \code{d}), \code{method}, and \code{notes} (always empty for this
+  function). There is no \code{variance_unusable} attribute: a first stage
+  whose scale cannot be estimated is an error (see Details).
 }
 \description{
-Two Stage approach to Get Fixed Width Confidence
-Interval  for the mean of negative exponential random variables.
+Evaluates the two stage procedure for a confidence interval of fixed
+width for the location \eqn{\theta} of a negative exponential
+distribution: the model \eqn{X = \theta + \sigma E} with \eqn{E} a
+standard exponential variable, so that \eqn{\theta} is the smallest
+value the outcome can take (a threshold, a guarantee time, a minimum
+response time) and \eqn{\sigma} is the scale. Despite the function's
+name, the quantity estimated is the location \eqn{\theta}, not the mean
+\eqn{\theta + \sigma}. The first stage (\code{pilot_data}) fixes the
+total sample size; the second stage (\code{additional_data}) completes
+it. The interval is \eqn{[X_{(1)} - d,\ X_{(1)}]}, where \eqn{X_{(1)}}
+is the smallest of all observations from both stages and \code{d} is
+the full width.
+}
+\details{
+With \eqn{m} first stage observations, their minimum \eqn{X_{(1:m)}},
+and the scale estimate
+\eqn{U_m = \sum_{i=1}^{m} (X_i - X_{(1:m)}) / (m - 1)}, the total
+sample size is
+\deqn{N = \max\{m,\ \lceil F_{2,2m-2,\alpha} \, U_m / d \rceil\},}
+where \eqn{F_{2,2m-2,\alpha}} is the upper \eqn{\alpha} point of the
+\emph{F} distribution with 2 and \eqn{2m - 2} degrees of freedom and
+\eqn{\alpha = 1 - } \code{conf_level}. If \eqn{N = m} the first stage is
+enough; otherwise \eqn{N - m} further observations are collected, once.
+\eqn{N} depends on the first stage alone. The row \code{optimal_n} is
+this total \eqn{N}, not the number still to collect.
+
+The quantile is one-sided because the interval is: the smallest
+observation can never fall below \eqn{\theta}, so the interval misses
+only when \eqn{X_{(1)} - \theta > d}.
+
+\strong{The guarantee is exact.} For negative exponential data the
+interval covers \eqn{\theta} with probability at least
+\code{conf_level} for every \eqn{\theta}, every \eqn{\sigma}, every
+\code{d}, and every first stage size \eqn{m \ge 2}. (Given \eqn{N}, the
+interval misses with probability \eqn{\exp(-N d / \sigma)}; \eqn{N}
+depends only on \eqn{U_m}, with \eqn{2(m - 1) U_m / \sigma} distributed
+as chi square on \eqn{2m - 2} degrees of freedom; and the expectation
+of \eqn{\exp(-F U_m / \sigma)} equals \eqn{\alpha} exactly at the
+\emph{F} quantile used.) The price is sample size: the expected \eqn{N}
+is about \eqn{F_{2,2m-2,\alpha} / \log(1/\alpha)} times the known scale
+sample size \eqn{C = \log(1/\alpha) \sigma / d}, which is why
+\code{\link{ts_fwd_nexp_mean_pilot}} does not return a very small first
+stage. The guarantee rests on the negative exponential model.
+
+The interval rows are reported at every call so that progress can be
+followed, but the interval carries the stated confidence level only
+when the stopping rule is met, that is, when the current sample size
+has reached \code{optimal_n}.
+
+\strong{A first stage with no variation is an error.} If every first
+stage observation is equal, or equal up to rounding error (a range of no
+more than \eqn{10^{-10}} times the largest absolute value, the rule used
+throughout the package), the scale cannot be estimated and the function
+stops with an error that says what to do. The purely sequential
+functions report such data as a stopping rule that is not yet met, with
+the attribute \code{variance_unusable}; here that would mislead, because
+the total sample size is fixed by the first stage alone, so no later
+observation could turn a rule reported as not met into one that is met.
+Data whose real variation is that small beside their size (times
+recorded in seconds since 1970 that differ by hundredths of a second,
+for example) should have a common value subtracted from both stages
+first; the total sample size does not depend on it.
 }
 \examples{
-pilot_ss <- ts_fwd_nexp_mean(alpha=0.01, d=0.5, gamma=1, pilot=TRUE)
-\dontrun{
-SLS <- rexp(pilot_ss, rate=1)
-}
-SLS <- rexp(100, rate=1)
-ts_fwd_nexp_mean(data=SLS, d=0.5, alpha=0.01, pilot=FALSE)
+# A usability researcher models the time to complete a task as a
+# shortest possible time plus an exponential delay, and wants the
+# shortest possible time to within half a second, with 95\% confidence.
+set.seed(113)
+m <- ts_fwd_nexp_mean_pilot(d = 0.5, conf_level = 0.95)
+first_stage <- 3 + rexp(m, rate = 1 / 4)
+check <- ts_fwd_nexp_mean(first_stage, d = 0.5)
+check
+
+# The first stage fixed the total sample size; collect the remainder.
+n_more <- attr(check, "criterion_n") - attr(check, "current_n")
+second_stage <- 3 + rexp(n_more, rate = 1 / 4)
+ts_fwd_nexp_mean(first_stage, second_stage, d = 0.5)
 
 }
 \references{
-Mukhopadhyay, N., \& de Silva, Basil M. (2009). \emph{Sequential Methods and Their Applications}. New York: CRC Press.
+Mukhopadhyay, N., & de Silva, B. M. (2009). \emph{Sequential methods and
+their applications}. Chapman & Hall/CRC. ISBN:9780367386535
+}
+\seealso{
+\code{\link{ts_fwd_nexp_mean_pilot}} for the first stage size;
+  \code{\link{seq_fwd_nexp_mean}} for the purely sequential procedure.
+
+Other ts_fwd_nexp_mean:
+\code{\link[=ts_fwd_nexp_mean_pilot]{ts_fwd_nexp_mean_pilot()}}
 }
 \author{
-Bhargab Chattopadhyay \email{Bhargab@iiitvadodara.ac.in},
-Neetu Shah \email{201451015@iiitvadodara.ac.in}, Ken Kelley \email{kkelley@nd.edu}
+Ken Kelley \email{kkelley@nd.edu},
+  Bhargab Chattopadhyay \email{bhargab@iiitvadodara.ac.in}
 }
+\concept{ts_fwd_nexp_mean}

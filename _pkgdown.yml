@@ -1,0 +1,141 @@
+url: https://yelleknek.github.io/SMSD/
+
+template:
+  bootstrap: 5
+  bslib:
+    primary: "#0c2340"
+    secondary: "#d39f10"
+    border-radius: 0.5rem
+
+home:
+  title: "SMSD: Sequential Methods for Study Design"
+  description: >
+    Sequential methods for study design when the sample size cannot be fixed
+    in advance: accuracy in parameter estimation (AIPE) for narrow confidence
+    intervals, minimum risk point estimation (MRPE), and a budget constrained
+    procedure for a contrast across groups, each as a pilot sample size
+    function and a function that checks the stopping rule on the data so far.
+
+navbar:
+  structure:
+    left:  [intro, reference, articles, news]
+    right: [search, github]
+
+# The articles menu is grouped the way the reference index is: by what the
+# reader wants to do. Every section has a navbar entry, so every article is
+# in the Articles menu. pkgdown::check_pkgdown() (run by tools/release_gate.R)
+# refuses a vignette that no section lists, so a new vignette is placed here
+# deliberately. The validation article is in vignettes/articles/: it is built
+# for the site only and is not part of the installed package, and pkgdown
+# names it articles/validation.
+articles:
+- title: Start Here
+  navbar: ~
+  contents:
+  - introduction
+  - step-by-step-sequential-workflow
+  - complete-tour
+- title: A Narrow Confidence Interval for an Effect Size
+  navbar: A Narrow Confidence Interval for an Effect Size
+  contents:
+  - starts_with("seq-aipe")
+- title: Minimum Risk Point Estimation
+  navbar: Minimum Risk Point Estimation
+  contents:
+  - starts_with("mrpe")
+- title: A Budget Across Groups
+  navbar: A Budget Across Groups
+  contents:
+  - matches("budget|noninferior")
+- title: Classical Procedures for a Mean, a Median, or a Location
+  navbar: Classical Procedures for a Mean, a Median, or a Location
+  contents:
+  - special-cases-and-simulation
+- title: Studying a Design Before Collecting Data
+  navbar: Studying a Design Before Collecting Data
+  contents:
+  - sensitivity-analysis
+  - coverage-and-design
+- title: Validation
+  desc: >
+    The package's results beside the published tables. This article is part
+    of the site only; it is not installed with the package.
+  navbar: Validation
+  contents:
+  - published-examples
+  - matches("^articles/validation$")
+
+# The reference index is organized by what the reader wants to do, and every
+# entry is a selector on the function families' prefixes, so a function added
+# to or removed from a family needs no edit here. pkgdown::check_pkgdown()
+# refuses a help page that no section claims, so a function that opens a new
+# family is placed here deliberately. It does not refuse the reverse, a
+# selector that matches nothing; the gate does, for each section.
+reference:
+- title: A Narrow Confidence Interval for an Effect Size
+  desc: >
+    Sequential accuracy in parameter estimation (AIPE). Each effect size has a
+    function for the pilot sample size and a function that takes the data
+    collected so far and reports the interval, the stopping criterion, and
+    whether sampling can stop.
+  contents:
+  - starts_with("seq_aipe_")
+  - -ends_with("_sensitivity")
+- subtitle: The Effect Size Estimates
+  desc: Point estimates used by the procedures above.
+  contents:
+  - matches("^(gini|slr)_")
+- title: Minimum Risk Point Estimation
+  desc: >
+    Sequential procedures that stop when the estimated risk, the cost of
+    estimation error plus the cost of sampling, is as small as it can be made:
+    the coefficient of variation and the standardized mean difference. The
+    minimum risk procedures for a mean are with the classical procedures.
+  contents:
+  - matches("^seq_mr_(cv|smd)")
+  - -ends_with("_sensitivity")
+- title: A Budget Across Groups
+  desc: >
+    A sequential procedure for a linear contrast of several group means under
+    a fixed budget, with unequal sampling costs and unequal variances, and the
+    decisions it supports.
+  contents:
+  - matches("budget|noninferior")
+  - -ends_with("_sensitivity")
+- title: Classical Procedures for a Mean, a Median, or a Location
+  desc: >
+    Fixed width, bounded length, bounded risk, minimum risk, and two stage
+    procedures from Mukhopadhyay and de Silva (2009).
+- subtitle: Fixed Width and Bounded Length Confidence Intervals
+  contents:
+  - matches("^seq_(fwd|blci)_")
+- subtitle: Bounded Risk Point Estimation
+  contents:
+  - starts_with("seq_br_")
+- subtitle: Minimum Risk Point Estimation of a Mean or a Location
+  contents:
+  - matches("^seq_mr_.*_mean")
+- subtitle: Two Stage Procedures
+  contents:
+  - starts_with("ts_")
+- subtitle: Supporting Calculations
+  contents:
+  - starts_with("power_")
+- title: Studying a Design Before Collecting Data
+  desc: >
+    Monte Carlo runs of a whole sequential procedure against a known data
+    generating mechanism: the final sample size to expect and, for the
+    interval procedures, the interval width and the coverage.
+  contents:
+  - ends_with("_sensitivity")
+- title: Reading and Reporting a Result
+  desc: >
+    The object every check function returns, with its print, summary, tidy,
+    and glance methods; the path a procedure takes through the stages of the
+    data in hand, with its plot; and a report of a procedure in words.
+  contents:
+  - matches("smsd_(check|path|report)")
+  - matches("^seq_(path|report)$")
+- title: The Package
+  contents:
+  - SMSD-package

@@ -1871,15 +1871,16 @@ test_that("a design that cannot be run is refused before any study is simulated"
 })
 
 test_that("a simulated study that overflows is reported, not summarized", {
-  # Weights of 0.001 and standard deviations of 1e154: the optimal variance,
-  # (2 * 0.001 * 1e154 * sqrt(10))^2 / 500 = 8e300, can be represented, so
-  # the design passes the checks. But the scores are of the order of 1e154,
-  # and the sum of squared deviations of five or more of them is of the
-  # order of 1e308 times their number, which overflows. seq_budget() stops
-  # on such data, and so does the simulation, rather than return a summary
-  # built on estimated variances of Inf.
+  # Weights of 0.001 and standard deviations of 1e155: the optimal variance,
+  # (2 * 0.001 * 1e155 * sqrt(10))^2 / 500 = 8e302, can be represented, so
+  # the design passes the checks. But the scores are of the order of 1e155,
+  # so a sample variance is of the order of 1e310, beyond the largest
+  # double (about 1.8e308) however the sum of squares is accumulated: on
+  # every platform, with or without extended precision, it is Inf.
+  # seq_budget() stops on such data, and so does the simulation, rather than
+  # return a summary built on estimated variances of Inf.
   expect_error(
-    seq_budget_sensitivity(c(0, 0), c(1e154, 1e154), c(0.001, -0.001),
+    seq_budget_sensitivity(c(0, 0), c(1e155, 1e155), c(0.001, -0.001),
                            c(10, 10), 500, G = 5, seed = 113),
     "contrast estimate or its variance in a simulated study cannot be computed: the values in 'true_means', 'true_sds', and 'contrast_weights'.*Rescale")
   # A hundred times smaller and everything is finite: V_o = 8e296.
